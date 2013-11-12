@@ -1,0 +1,32 @@
+indexes:
+
+- kind: BudgetLine
+  ancestor: no
+  properties:
+  - name: code
+  - name: year
+
+- kind: BudgetLine
+  ancestor: no
+  properties:
+  - name: depth
+  - name: prefixes
+  - name: year
+  - name: code
+
+- kind: SupportLine
+  ancestor: no
+  properties:
+  - name: prefixes
+  - name: year
+
+- kind: ChangeLine
+  ancestor: no
+  properties:
+  - name: prefixes
+  - name: year
+
+
+
+
+

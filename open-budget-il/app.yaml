@@ -1,0 +1,26 @@
+application: open-budget-il
+version: 1
+runtime: python27
+api_version: 1
+threadsafe: true
+
+handlers:
+- url: /api/.*
+  script: main.api
+- url: /report/api/.*
+  script: main.report
+- url: /report/app/
+  static_files: webapp/dist/index.html
+  upload: webapp/dist/index.html
+- url: /report/app/(.+)
+  static_files: webapp/dist/\1
+  upload: webapp/dist/
+
+builtins:
+- remote_api: on
+
+libraries:
+- name: webapp2
+  version: latest
+- name: jinja2
+  version: latest
