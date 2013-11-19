@@ -78,6 +78,22 @@ class MainPage(webapp2.RequestHandler):
         ret = [ x.to_dict() for x in lines ]
         self.response.write(json.dumps(ret))
 
+class ReportAll(webapp2.RequestHandler):
+
+    def get(self,year):
+        year = int(year)
+        all_items = BudgetLine.query(BudgetLine.depth==3,BudgetLine.year==year).order(BudgetLine.code)
+
+        template_values = {
+            'year': year,
+            'items': all_items,
+        }
+        template = JINJA_ENVIRONMENT.get_template('all_for_report.html')
+        self.response.write(template.render(template_values))
+
+def code_starts_with(clz,prefix):
+    return ndb.AND(clz.code>=prefix,clz.code<prefix+'X')
+
 class Report(webapp2.RequestHandler):
 
     def get(self,code,year):
@@ -95,24 +111,30 @@ class Report(webapp2.RequestHandler):
             rec = BudgetLine.query(BudgetLine.code==code, BudgetLine.year==year).fetch(1)[0]
             rec_data = rec.to_dict()
 
-            ## parents 
+            ### async queries
             parent_codes = [ prefix for prefix in rec.prefixes if prefix != code and prefix != "00" ]
-            parents = [ record.to_dict() for record in 
-                        BudgetLine.query(BudgetLine.code.IN(parent_codes), 
-                                         BudgetLine.year==year) ]
-
-            ## hierarchy
+            parent_query = BudgetLine.query(BudgetLine.code.IN(parent_codes), 
+                                         BudgetLine.year==year).fetch_async()
             prefixes = [ prefix for prefix in rec.prefixes if prefix != "00" ]
             prefixes = [ (len(prefix)/2, prefix) for prefix in prefixes ]
-            by_depth = [ (depth,[ record.to_dict() for record in 
-                                  BudgetLine.query(BudgetLine.prefixes==prefix, 
-                                                   BudgetLine.year==year, 
-                                                   BudgetLine.depth==depth).order(BudgetLine.code) ]) for depth, prefix in prefixes ]
+            hierarchy_queries = [ (depth,
+                                   BudgetLine.query(code_starts_with(BudgetLine,prefix), 
+                                                    BudgetLine.year==year, 
+                                                    BudgetLine.depth==depth).order(BudgetLine.code).fetch_async(batch_size=100))
+                                  for depth, prefix in prefixes ]
+            history_query = BudgetLine.query(BudgetLine.code==code).fetch_async(batch_size=100)
+            support_query = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.year).fetch_async(batch_size=100)
+            changes_query = ChangeLine.query(ChangeLine.prefixes==code).fetch_async(batch_size=100)
+
+            ## parents 
+            parents = [ record.to_dict() for record in parent_query.get_result() ]
+
+            ## hierarchy
+            by_depth = [ (depth,[ record.to_dict() for record in query.get_result() ]) for depth,query in hierarchy_queries ]
             by_depth = dict(by_depth)
 
             ## history over the years
-            history_recs = dict([ (record.year,record) for record in 
-                                  BudgetLine.query(BudgetLine.code==code) ])
+            history_recs = dict([ (record.year,record) for record in history_query.get_result() ])
             history = []
             for y in range(year,1991,-1):
                 rec = history_recs.get(y)
@@ -129,8 +151,7 @@ class Report(webapp2.RequestHandler):
                 history.append(to_add)
             
             ## supports
-            support_recs = [ record.to_dict() for record in 
-                             SupportLine.query(SupportLine.prefixes==code).order(SupportLine.year) ]
+            support_recs = [ record.to_dict() for record in support_query.get_result() ]
             supports = {}
             for support in support_recs:
                 support_code = support['code']
@@ -161,8 +182,7 @@ class Report(webapp2.RequestHandler):
                          'gross_expense_diff': rec.gross_expense_diff,
                          'allocated_income_diff': rec.allocated_income_diff,
                          'commitment_limit_diff': rec.commitment_limit_diff,
-                         'personnel_max_diff': rec.personnel_max_diff } for rec in 
-                        ChangeLine.query(ChangeLine.prefixes==code) ]
+                         'personnel_max_diff': rec.personnel_max_diff } for rec in changes_query.get_result() ]
 
             ret = { 'code'    : repr(code),
                     'rec'     : rec_data, 
@@ -187,5 +207,6 @@ api = webapp2.WSGIApplication([
 ], debug=True)
 report = webapp2.WSGIApplication([
     ('/report/api/([0-9]{8})/([0-9]{4})', Report),
+    ('/report/all/([0-9]{4})', ReportAll),
 ], debug=True)
 

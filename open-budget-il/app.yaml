@@ -11,13 +11,16 @@ handlers:
   script: main.report
 - url: /report/app/
   static_files: webapp/dist/index.html
-  upload: webapp/dist/index.html
+  upload: webapp/dist/
+- url: /report/all/.*
+  script: main.report
 - url: /report/app/(.+)
   static_files: webapp/dist/\1
   upload: webapp/dist/
 
 builtins:
 - remote_api: on
+- appstats: on
 
 libraries:
 - name: webapp2

@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+{% autoescape true %}
+<html>
+  <body style="direction:rtl;">
+    {% for item in items %}
+    <p><a target="blank" href="/report/app/#{{item.code}}/{{item.year}}">{{item.code}} - {{item.title}}</a></p>
+    {% endfor %}
+  </body>
+</html>
+{% endautoescape %}
