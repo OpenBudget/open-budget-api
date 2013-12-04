@@ -2,6 +2,7 @@ import os
 import webapp2
 import json
 import jinja2
+import datetime
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
@@ -49,7 +50,7 @@ class Update(webapp2.RequestHandler):
             if what == "bl":
                 dbitem = BudgetLine.query(BudgetLine.year==item['year'],BudgetLine.code==item['code']).fetch(1)
                 if len(dbitem) == 0:
-                    self.response.write("No item for year=%d, code=%s" % (item['year'],item['code']))
+                    self.response.write("No budget item for year=%d, code=%s" % (item['year'],item['code']))
                     dbitem = BudgetLine()
                     code = item['code']
                     prefixes = [ code[:l] for l in range(2,len(code),2) ]
@@ -61,7 +62,29 @@ class Update(webapp2.RequestHandler):
                     dbitem = dbitem[0]
                 for k,v in item.iteritems():
                     dbitem.__setattr__(k,v)
-                    to_put.append(dbitem)
+                to_put.append(dbitem)
+            if what == "cl":
+                dbitem = ChangeLine.query(ChangeLine.year==item['year'],
+                                          ChangeLine.leading_item==item['leading_item'],
+                                          ChangeLine.req_code==item['req_code'],
+                                          ChangeLine.budget_code==item['budget_code']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No change item for year=%(year)d, leading_item=%(leading_item)d, req_code=%(req_code)d, code=%(budget_code)s" % item)
+                    dbitem = ChangeLine()
+                    code = item['budget_code']
+                    prefixes = [ code[:l] for l in range(2,len(code),2) ]
+                    prefixes.append(code)
+                    self.response.write(code+"==>"+repr(prefixes)+"\n")
+                    dbitem.prefixes = prefixes
+                else:
+                    for x in dbitem[1:]:
+                        x.delete()
+                    dbitem = dbitem[0]
+                if item.get('date') is not None and item['date'] != "":
+                    item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
+                for k,v in item.iteritems():
+                    dbitem.__setattr__(k,v)
+                to_put.append(dbitem)
         ndb.put_multi(to_put)
         self.response.write("OK\n")
 

@@ -1,3 +1,6 @@
 [submodule "frontend"]
 	path = webapp
 	url = git@github.com:OpenBudget/open-budget-frontend.git
+[submodule "data"]
+	path = data
+	url = git@github.com:OpenBudget/open-budget-data.git
