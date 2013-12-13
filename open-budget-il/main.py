@@ -88,18 +88,45 @@ class Update(webapp2.RequestHandler):
         ndb.put_multi(to_put)
         self.response.write("OK\n")
 
-    
-class MainPage(webapp2.RequestHandler):
+class GenericApi(webapp2.RequestHandler):
 
-    def get(self,code,year=None):
+    def get(self,query):
         self.response.headers['Content-Type'] = 'application/json'
+        first = self.request.get('first')
+        if first is not None and first != '':
+            first = int(first)
+        else:
+            first = 0
+        limit = self.request.get('limit')
+        if limit is not None and limit != '':
+            limit = int(limit)
+        else:
+            limit = 10000
+        ret = [ x.to_dict() for x in query.fetch(limit=first+limit)[first:first+limit] ]
+        self.response.write(json.dumps(ret))
+            
+class BudgetApi(GenericApi):
+
+    def get(self,code,year=None,kids=None):
         if year != None:
             year = int(year)
-            lines = BudgetLine.query(BudgetLine.code==code,BudgetLine.year==year)
+            if kids is None:
+                lines = BudgetLine.query(BudgetLine.code==code,BudgetLine.year==year)
+            else:
+                lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.year==year)
         else:
-            lines = BudgetLine.query(BudgetLine.code==code)
-        ret = [ x.to_dict() for x in lines ]
-        self.response.write(json.dumps(ret))
+            lines = BudgetLine.query(BudgetLine.code==code).order(BudgetLine.year)
+        super(BudgetApi,self).get(lines)
+
+class ChangesApi(GenericApi):
+
+    def get(self,code,year=None,kids=None):
+        if year != None:
+            year = int(year)
+            lines = ChangeLine.query(ChangeLine.code==code,ChangeLinetLine.year==year)
+        else:
+            lines = BudgetLine.query(ChangeLine.code==code)
+        super(ChangesApi,self).get(lines)
 
 class ReportAll(webapp2.RequestHandler):
 
@@ -137,17 +164,17 @@ class Report(webapp2.RequestHandler):
             ### async queries
             parent_codes = [ prefix for prefix in rec.prefixes if prefix != code and prefix != "00" ]
             parent_query = BudgetLine.query(BudgetLine.code.IN(parent_codes), 
-                                         BudgetLine.year==year).fetch_async()
+                                            BudgetLine.year==year).fetch_async(batch_size=100)
             prefixes = [ prefix for prefix in rec.prefixes if prefix != "00" ]
             prefixes = [ (len(prefix)/2, prefix) for prefix in prefixes ]
             hierarchy_queries = [ (depth,
                                    BudgetLine.query(code_starts_with(BudgetLine,prefix), 
                                                     BudgetLine.year==year, 
-                                                    BudgetLine.depth==depth).order(BudgetLine.code).fetch_async(batch_size=100))
+                                                    BudgetLine.depth==depth).order(BudgetLine.code).fetch_async(batch_size=500))
                                   for depth, prefix in prefixes ]
-            history_query = BudgetLine.query(BudgetLine.code==code).fetch_async(batch_size=100)
-            support_query = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.year).fetch_async(batch_size=100)
-            changes_query = ChangeLine.query(ChangeLine.prefixes==code).fetch_async(batch_size=100)
+            history_query = BudgetLine.query(BudgetLine.code==code).fetch_async(batch_size=500)
+            support_query = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.year).fetch_async(batch_size=500)
+            changes_query = ChangeLine.query(ChangeLine.prefixes==code).order(-ChangeLine.year,-ChangeLine.date).fetch_async(batch_size=500)
 
             ## parents 
             parents = [ record.to_dict() for record in parent_query.get_result() ]
@@ -196,7 +223,8 @@ class Report(webapp2.RequestHandler):
                           'amount_allocated':support['amount_allocated']})
 
             ## changes
-            changes = [ {'date':'-' if rec.date is None else rec.date.strftime("%d/%m/%Y"),
+            changes = [ {'year':rec.year,
+                         'date':None if rec.date is None else rec.date.strftime("%d/%m/%Y"),
                          'explanation': rec.explanation,
                          'req_title': rec.req_title,
                          'change_title': rec.change_title,
@@ -224,8 +252,12 @@ class Report(webapp2.RequestHandler):
 
             
 api = webapp2.WSGIApplication([
-    ('/api/([0-9]+)', MainPage),
-    ('/api/([0-9]+)/([0-9]+)', MainPage),
+    ('/api/budget/([0-9]+)', BudgetApi),
+    ('/api/budget/([0-9]+)/([0-9]+)', BudgetApi),
+    ('/api/budget/([0-9]+)/([0-9]+)/(kids)', BudgetApi),
+    ('/api/changes/([0-9]+)', ChangesApi),
+    ('/api/changes/([0-9]+)/([0-9]+)', ChangesApi),
+
     ('/api/update/([a-z]+)', Update)
 ], debug=True)
 report = webapp2.WSGIApplication([
