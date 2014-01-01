@@ -1,13 +1,17 @@
+# encoding: utf8
+
 import os
 import webapp2
 import json
 import jinja2
 import datetime
+import re
+import logging
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
 
-from models import BudgetLine, SupportLine, ChangeLine
+from models import BudgetLine, SupportLine, ChangeLine, SearchHelper
 
 INFLATION = {1992: 2.338071159424868,
  1993: 2.1016785142253185,
@@ -46,23 +50,25 @@ class Update(webapp2.RequestHandler):
         to_update = self.request.body.split('\n')
         to_update = [ json.loads(x) for x in to_update ]
         to_put = []
+        to_delete = []
         for item in to_update:
+            dbitem = None
             if what == "bl":
                 dbitem = BudgetLine.query(BudgetLine.year==item['year'],BudgetLine.code==item['code']).fetch(1)
                 if len(dbitem) == 0:
                     self.response.write("No budget item for year=%d, code=%s" % (item['year'],item['code']))
                     dbitem = BudgetLine()
-                    code = item['code']
-                    prefixes = [ code[:l] for l in range(2,len(code),2) ]
-                    prefixes.append(code)
-                    self.response.write(code+"==>"+prefixes+"\n")
-                    dbitem.prefixes = prefixes
-                    dbitem.depth = len(code)/2 - 1
                 else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
                     dbitem = dbitem[0]
-                for k,v in item.iteritems():
-                    dbitem.__setattr__(k,v)
-                to_put.append(dbitem)
+                code = item['code']
+                prefixes = [ code[:l] for l in range(2,len(code),2) ]
+                prefixes.append(code)
+                #self.response.write("%s==>%s\n" % (code,prefixes))
+                item["prefixes"] = prefixes
+                item["depth"] = len(code)/2 - 1
+
             if what == "cl":
                 dbitem = ChangeLine.query(ChangeLine.year==item['year'],
                                           ChangeLine.leading_item==item['leading_item'],
@@ -71,62 +77,189 @@ class Update(webapp2.RequestHandler):
                 if len(dbitem) == 0:
                     self.response.write("No change item for year=%(year)d, leading_item=%(leading_item)d, req_code=%(req_code)d, code=%(budget_code)s" % item)
                     dbitem = ChangeLine()
-                    code = item['budget_code']
-                    prefixes = [ code[:l] for l in range(2,len(code),2) ]
-                    prefixes.append(code)
-                    self.response.write(code+"==>"+repr(prefixes)+"\n")
-                    dbitem.prefixes = prefixes
                 else:
                     for x in dbitem[1:]:
-                        x.delete()
+                        to_delete.append(x)
                     dbitem = dbitem[0]
+                code = item['budget_code']
+                prefixes = [ code[:l] for l in range(2,len(code),2) ]
+                prefixes.append(code)
+                #self.response.write(code+"==>"+repr(prefixes)+"\n")
+                item["prefixes"] = prefixes
                 if item.get('date') is not None and item['date'] != "":
                     item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
+
+            if what == "sh":
+                dbitem = SearchHelper.query(SearchHelper.kind==item['kind'],SearchHelper.value==item['value'],SearchHelper.year==max(item['year'])).fetch(1000,batch_size=1000)
+                if len(dbitem) == 0:
+                    self.response.write("No searchhelper for kind=%(kind)s, value=%(value)s, year=%(year)r\n" % item)
+                    dbitem = SearchHelper()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]                  
+                item["prefix"] = None
+
+            def mysetattr(i,k,v):
+                orig_v = i.__getattribute__(k)
+                if type(orig_v) == list and type(v) == list: 
+                    orig_v.sort()
+                    v.sort()
+                    if json.dumps(orig_v) != json.dumps(v):
+                        i.__setattr__(k,v)
+                        self.response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
+                        return True
+                else:
+                    if orig_v != v:
+                        i.__setattr__(k,v)
+                        self.response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
+                        return True
+                return False
+
+            if dbitem is not None:
+                dirty = False
                 for k,v in item.iteritems():
-                    dbitem.__setattr__(k,v)
-                to_put.append(dbitem)
-        ndb.put_multi(to_put)
-        self.response.write("OK\n")
+                    dirty = mysetattr(dbitem,k,v) or dirty
+                if dirty:
+                    to_put.append(dbitem)
+
+        if len(to_put) > 0:
+            ndb.put_multi(to_put)
+        if len(to_delete) > 0:
+            ndb.delete_multi([x.key for x in to_delete])
+        self.response.write("OK %d/%d-%d\n" % (len(to_put),len(to_update),len(to_delete)))
+
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self,o):
+        if type(o) == datetime.date:
+            return o.strftime("%d/%m/%Y")
+        return json.JSONEncoder.default(self, o)
 
 class GenericApi(webapp2.RequestHandler):
 
-    def get(self,query):
+    def do_paging(self):
+        return True
+
+    def get(self,*args,**kw):
+
+        self.single = False
         self.response.headers['Content-Type'] = 'application/json'
-        first = self.request.get('first')
-        if first is not None and first != '':
-            first = int(first)
+        self.first = self.request.get('first')
+        if self.first is not None and self.first != '':
+            self.first = int(self.first)
         else:
-            first = 0
-        limit = self.request.get('limit')
-        if limit is not None and limit != '':
-            limit = int(limit)
+            self.first = 0
+        self.limit = self.request.get('limit')
+        if self.limit is not None and self.limit != '':
+            self.limit = int(self.limit)
         else:
-            limit = 10000
-        ret = [ x.to_dict() for x in query.fetch(limit=first+limit)[first:first+limit] ]
-        self.response.write(json.dumps(ret))
+            self.limit = 100
+
+        key = self.key(args,kw)+"//%s/%s" % (self.first,self.limit)
+        data = memcache.get(key)
+        if data is not None:
+            ret = data.decode("zip")
+        else:
+            query = self.get_query(*args,**kw)
+            if self.do_paging():
+                ret = [ x.to_dict() for x in query.fetch(batch_size=self.first+self.limit,limit=self.limit,offset=self.first) ]
+            else:
+                ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit) ]
+            if self.single and len(ret)>0:
+                ret = ret[0]
+            ret = CustomJSONEncoder().encode(ret)
+            memcache.add(key, ret.encode("zip"), 30)
+
+        callback = self.request.get('callback')
+        if callback is not None and callback != "":
+            ret = "%s(%s);" % ( callback, ret )
+
+        self.response.write(ret)
             
 class BudgetApi(GenericApi):
 
-    def get(self,code,year=None,kids=None):
+    def key(self,code,year=None,kind=None):
+        return "BudgetApi:%s/%s/%s" % (code,year,kind)
+
+    def get_query(self,code,year=None,kind=None):
         if year != None:
             year = int(year)
-            if kids is None:
+            if kind is None:
                 lines = BudgetLine.query(BudgetLine.code==code,BudgetLine.year==year)
-            else:
-                lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.year==year)
+                self.single = True
+            elif kind == "kids":
+                lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.depth==len(code)/2,BudgetLine.year==year)
+            elif kind == "parents":
+                parent_codes = [ code[:x] for x in range(2,len(code)+1,2) ]
+                lines = BudgetLine.query(BudgetLine.code.IN(parent_codes),BudgetLine.year==year)
         else:
             lines = BudgetLine.query(BudgetLine.code==code).order(BudgetLine.year)
-        super(BudgetApi,self).get(lines)
+        return lines
 
 class ChangesApi(GenericApi):
 
-    def get(self,code,year=None,kids=None):
+    def key(self,code,year=None,kind=None):
+        return "ChangesApi:%s/%s/%s" % (code,year,kind)
+
+    def get_query(self,code,year=None,kids=None):
         if year != None:
             year = int(year)
-            lines = ChangeLine.query(ChangeLine.code==code,ChangeLinetLine.year==year)
+            lines = ChangeLine.query(ChangeLine.budget_code==code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
         else:
-            lines = BudgetLine.query(ChangeLine.code==code)
-        super(ChangesApi,self).get(lines)
+            lines = ChangeLine.query(ChangeLine.budget_code==code).order(-ChangeLine.year,-ChangeLine.date)
+        return lines
+
+class SupportsApi(GenericApi):
+
+    def key(self,code,year=None,kind=None):
+        return "SupportsApi:%s/%s/%s" % (code,year,kind)
+
+    def get_query(self,code,year=None,kids=None):
+        lines = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.recepient,SupportLine.kind,SupportLine.year)
+        return lines
+
+WORDS = re.compile(u'([א-ת0-9a-zA-Z]+)')
+
+class SearchApi(GenericApi):
+
+    def do_paging(self):
+        return False
+
+    def key(self,kind,year=None):
+        queryString = self.request.get('q')
+        return "SearchApi:%s/%s/%s" % (kind,year,queryString)
+    
+    def get_query(self,kind,year=None):
+        
+        queryString = self.request.get('q')
+        parts = WORDS.findall(queryString)
+        if kind == 'budget':
+            codes = None
+            token_condition = [ SearchHelper.tokens==part for part in parts ]
+            token_condition = ndb.AND(*token_condition)
+            if year is None:
+                query = SearchHelper.query(token_condition, SearchHelper.kind=="BudgetLine").order(SearchHelper.priority)
+            else:
+                year = int(year)
+                query = SearchHelper.query(token_condition, SearchHelper.kind=="BudgetLine", SearchHelper.year==year).order(SearchHelper.priority)
+            #part_codes = set()
+            part_codes = []
+            for rec in query.fetch(self.limit,batch_size=self.limit):
+                part_codes.append((rec.value,year if year is not None else max(rec.year)))
+                
+            #if codes is None:
+            #    codes = part_codes
+            #else:
+            #    codes.intersection_update(part_codes)
+            
+            codes = list(part_codes)
+            #codes.sort( key=lambda(x): "%08d/%s" % (len(x[0]),x[0]) )
+            #codes = codes[self.first:self.first+self.limit]
+            conditions = [ ndb.AND( BudgetLine.code==code, BudgetLine.year==year) for code,year in codes ]
+            conditions.append( BudgetLine.code=="non-existent-code" )
+            return BudgetLine.query( ndb.OR(*conditions) )
+            
+        return None
 
 class ReportAll(webapp2.RequestHandler):
 
@@ -140,6 +273,10 @@ class ReportAll(webapp2.RequestHandler):
         }
         template = JINJA_ENVIRONMENT.get_template('all_for_report.html')
         self.response.write(template.render(template_values))
+
+def prefix_starts_with(clz,prefix):
+    next = prefix[:-1] + unichr(ord(prefix[-1])+1)
+    return ndb.AND(clz.prefix>=prefix,clz.prefix<next)
 
 def code_starts_with(clz,prefix):
     return ndb.AND(clz.code>=prefix,clz.code<prefix+'X')
@@ -243,7 +380,7 @@ class Report(webapp2.RequestHandler):
                     'supports': supports,
                     'changes' : changes }
             ret = json.dumps(ret)
-            memcache.add(key, ret.encode("zip"), 3660)
+            memcache.add(key, ret.encode("zip"), 7200)
 
         self.response.headers['Content-Type'] = 'application/json'
         if callback is not None and callback != "":
@@ -255,8 +392,12 @@ api = webapp2.WSGIApplication([
     ('/api/budget/([0-9]+)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(kids)', BudgetApi),
+    ('/api/budget/([0-9]+)/([0-9]+)/(parents)', BudgetApi),
     ('/api/changes/([0-9]+)', ChangesApi),
     ('/api/changes/([0-9]+)/([0-9]+)', ChangesApi),
+    ('/api/supports/([0-9]+)', SupportsApi),
+    ('/api/search/([a-z]+)', SearchApi),
+    ('/api/search/([a-z]+)/([0-9]+)', SearchApi),
 
     ('/api/update/([a-z]+)', Update)
 ], debug=True)

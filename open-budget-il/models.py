@@ -57,3 +57,11 @@ class ChangeLine(ndb.Model):
 
     prefixes = ndb.StringProperty(repeated=True)
 
+class SearchHelper(ndb.Model):
+    """Text Search index"""
+    year = ndb.IntegerProperty(repeated=True)
+    kind = ndb.StringProperty()
+    prefix = ndb.StringProperty()
+    value = ndb.StringProperty()
+    priority = ndb.IntegerProperty()
+    tokens = ndb.StringProperty(repeated=True)
