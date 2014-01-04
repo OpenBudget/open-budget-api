@@ -25,4 +25,4 @@ if __name__=="__main__":
         i+=1
     for kind, pending in lines.iteritems():
         if len(pending)>0:
-            do_write("\n".join(lines),i,kind)
+            do_write("\n".join(lines[kind]),i,kind)

@@ -10,6 +10,7 @@ import logging
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
+from google.appengine.ext import deferred
 
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper
 
@@ -155,7 +156,7 @@ class GenericApi(webapp2.RequestHandler):
         else:
             self.limit = 100
 
-        key = self.key(args,kw)+"//%s/%s" % (self.first,self.limit)
+        key = self.key(*args,**kw)+"//%s/%s" % (self.first,self.limit)
         data = memcache.get(key)
         if data is not None:
             ret = data.decode("zip")
@@ -198,13 +199,28 @@ class BudgetApi(GenericApi):
 
 class ChangesApi(GenericApi):
 
-    def key(self,code,year=None,kind=None):
-        return "ChangesApi:%s/%s/%s" % (code,year,kind)
+    def key(self,*args,**kw):
+        print args,kw
+        return "ChangesApi:%s" % "/".join(args)
 
-    def get_query(self,code,year=None,kids=None):
-        if year != None:
+    def get_query(self,*args,**kw):
+        code = leading_item = req_code = year = None
+        if len(args) == 1:
+            code = args
+        elif len(args) == 2:
+            code, year = args
+        elif len(args) == 3:
+            leading_item, req_code, year = args
+        print code,leading_item,req_code,year
+        if year is not None:
             year = int(year)
-            lines = ChangeLine.query(ChangeLine.budget_code==code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
+            if code is not None:
+                lines = ChangeLine.query(ChangeLine.budget_code==code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
+            else:
+                leading_item = int(leading_item)
+                req_code = int(req_code)
+                print "222",code,leading_item,req_code,year
+                lines = ChangeLine.query(ChangeLine.leading_item==leading_item,ChangeLine.req_code==req_code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
         else:
             lines = ChangeLine.query(ChangeLine.budget_code==code).order(-ChangeLine.year,-ChangeLine.date)
         return lines
@@ -395,6 +411,7 @@ api = webapp2.WSGIApplication([
     ('/api/budget/([0-9]+)/([0-9]+)/(parents)', BudgetApi),
     ('/api/changes/([0-9]+)', ChangesApi),
     ('/api/changes/([0-9]+)/([0-9]+)', ChangesApi),
+    ('/api/changes/([0-9][0-9])-([0-9][0-9][0-9])/([0-9]+)', ChangesApi),
     ('/api/supports/([0-9]+)', SupportsApi),
     ('/api/search/([a-z]+)', SearchApi),
     ('/api/search/([a-z]+)/([0-9]+)', SearchApi),

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <link type="text/css" rel="stylesheet" href="dist/bower_components/bootstrap/dist/css/bootstrap.css" />
+  <link type="text/css" rel="stylesheet" href="dist/bower_components/bootstrap/dist/css/bootstrap-theme.css" />  
+  <link type="text/css" rel="stylesheet" href="dist/styles/main.css" /> 
+
+  {% block styles %}{% endblock styles %}
+
+</head>
+<body>
+  <div class="main">
+   {% autoescape true %}
+   {% block content %}{% endblock content %}
+   {% endautoescape %}
+ </div>
+
+  <!-- Popup -->
+  <div class="modal fade" id="popupDialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+          <h4 class="modal-title"></h4>
+        </div>
+        <div class="modal-body">
+          <p class="body-content"></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- js -->
+  <script type="text/javascript" src="dist/bower_components/jquery/jquery.min.js"></script>   
+  <script type="text/javascript" src="dist/bower_components/bootstrap/js/modal.js"></script>
+  <script type="text/javascript" src="dist/scripts/popup.js"></script>  
+
+  {% block scripts %}{% endblock scripts %}
+
+</body>
+</html>

@@ -92,12 +92,19 @@ indexes:
   - name: date
     direction: desc
 
+- kind: ChangeLine
+  properties:
+  - name: leading_item
+  - name: req_code
+  - name: year
+  - name: date
+    direction: desc
+
 - kind: SearchHelper
   properties:
   - name: kind
   - name: tokens
   - name: priority
-    direction: asc
 
 - kind: SearchHelper
   properties:
@@ -105,7 +112,6 @@ indexes:
   - name: year
   - name: tokens
   - name: priority
-    direction: asc
 
 - kind: SupportLine
   properties:

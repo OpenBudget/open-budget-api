@@ -18,6 +18,11 @@ handlers:
   static_files: webapp/dist/\1
   upload: webapp/dist/
 
+- url: /change_input/dist
+  static_dir: change_input/dist
+- url: /change_input/.*
+  script: change_input.precommittee.application
+
 builtins:
 - remote_api: on
 - appstats: on
