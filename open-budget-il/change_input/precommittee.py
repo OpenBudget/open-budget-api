@@ -13,18 +13,13 @@ from google.appengine.api import files
 import jinja2
 import webapp2
 
+from models import PreCommitteePage
+
 
 JINJA_ENVIRONMENT = jinja2.Environment(
     loader=jinja2.FileSystemLoader(os.path.dirname(__file__)),
     extensions=['jinja2.ext.autoescape'],
     autoescape=True)
-
-class PreCommitteePage(ndb.Model):
-    """One page from one blob"""
-    pdf = ndb.BlobKeyProperty()
-    page = ndb.BlobKeyProperty()
-    leading_item = ndb.IntegerProperty() 
-    req_code = ndb.IntegerProperty() 
 
 class MainPage(webapp2.RequestHandler):
 
@@ -116,39 +111,40 @@ class Request(webapp2.RequestHandler):
     
     def get(self):
 
-        requestId = self.request.get("id")
+        pdfId = self.request.get("pdfId")
 
-        pages = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(requestId))
-        pages = [ { 'pageId' : str(i), 'image': images.get_serving_url(f.page,size=900,crop=False) } for i,f in enumerate(pages) ]
+        committee_items = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(pdfId))
+        committee_items = [ { 'pageId' : str(f.page), 'image': images.get_serving_url(f.page,size=900,crop=False) } for f in committee_items ]
 
-        request = {
-            'id': requestId,
-            'pages': pages,
-            'pages_json': json.dumps(pages),
+        committee = {
+            'id': pdfId,
+            'committee_items': committee_items,
+            'committee_items_json': json.dumps(committee_items),
             'committeeDate': 1388527200000,
             'requestDate': 1388354400000
         } # TODO: get this object from DB
 
-        if requestId is None:
+        if pdfId is None:
            template_values = {}
             # TODO: create a page with a list of all requests
         else:
             template_values = {                
-                'request': request
+                'committee': committee
             }
-            template_name = 'requestEdit.html'
+            template_name = 'committee.html'
 
         template = JINJA_ENVIRONMENT.get_template(template_name)
         self.response.write(template.render(template_values))
 
     def post(self):
-
-        reqDate = self.request.get("requestDate")
-        comDate = self.request.get("committeeDate")
+        
+        comDate = self.request.get("committeeDateVal")
         fileUrl = self.request.get("requestFileUrl")
 
-        query_params = {'id': fileUrl}  # TODO:  replace with the created request's ID
-        self.redirect('/change_input/request?' + urllib.urlencode(query_params))
+        # TODO: break pdf to images and save request and its pages to DB
+        
+        query_params = {'pdfId': fileUrl}  # TODO:  replace with the created request's ID
+        self.redirect('/change_input/committee?' + urllib.urlencode(query_params))
 
 
 class Page(webapp2.RequestHandler):
@@ -166,9 +162,11 @@ class Page(webapp2.RequestHandler):
         } 
         self.response.out.write(json.dumps(resp))
 
+
+
 application = webapp2.WSGIApplication([
     ('/change_input/', MainPage),
     ('/change_input/uploadFile', UploadFile),
-    ('/change_input/request', Request),
+    ('/change_input/committee', Request),
     ('/change_input/page', Page)
 ], debug=True)

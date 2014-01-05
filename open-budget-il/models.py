@@ -65,3 +65,13 @@ class SearchHelper(ndb.Model):
     value = ndb.StringProperty()
     priority = ndb.IntegerProperty()
     tokens = ndb.StringProperty(repeated=True)
+
+
+class PreCommitteePage(ndb.Model):
+    """One page from one blob"""
+    pdf = ndb.BlobKeyProperty()
+    page = ndb.BlobKeyProperty()
+    year = ndb.IntegerProperty()
+    leading_item = ndb.IntegerProperty() 
+    req_code = ndb.IntegerProperty() 
+    date = ndb.DateProperty()

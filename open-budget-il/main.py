@@ -10,7 +10,7 @@ import logging
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
-from google.appengine.ext import deferred
+from google.appengine.ext import blobstore
 
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper
 
@@ -100,6 +100,18 @@ class Update(webapp2.RequestHandler):
                         to_delete.append(x)
                     dbitem = dbitem[0]                  
                 item["prefix"] = None
+
+            if what == "pcp":
+                dbitem = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(item['pdf']), PreCommitteePage.page==blobstore.BlobKey(item['page']))
+                if len(dbitem) == 0:
+                    self.response.write("No PreCommitteePage for pdf=%(pdf)s, page=%(page)s\n" % item)
+                    dbitem = PreCommitteePage()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]                  
+                del item["pdf"]
+                del item["page"]
 
             def mysetattr(i,k,v):
                 orig_v = i.__getattribute__(k)
