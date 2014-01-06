@@ -91,7 +91,7 @@ class Update(webapp2.RequestHandler):
                     try:
                         item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
                     except:
-                        item['date'] = datetime.fromtimestamp(item['date']/1000.0)
+                        item['date'] = datetime.datetime.fromtimestamp(item['date']/1000.0)
 
             if what == "sh":
                 dbitem = SearchHelper.query(SearchHelper.kind==item['kind'],SearchHelper.value==item['value'],SearchHelper.year==max(item['year'])).fetch(1000,batch_size=1000)
@@ -105,7 +105,7 @@ class Update(webapp2.RequestHandler):
                 item["prefix"] = None
 
             if what == "pcp":
-                dbitem = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(item['pdf']), PreCommitteePage.page==blobstore.BlobKey(item['page']))
+                dbitem = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(item['pdf']), PreCommitteePage.page==blobstore.BlobKey(item['page'])).fetch(100)
                 if len(dbitem) == 0:
                     self.response.write("No PreCommitteePage for pdf=%(pdf)s, page=%(page)s\n" % item)
                     dbitem = PreCommitteePage()

@@ -182,7 +182,7 @@ function setArticleName(labelElm, name) {
 function getCommitteData() {
 	var result = { 
 		id: $('#committeeId').val(), 
-		date: $('#committeeDate').val() 
+		date: parseInt($('#committeeDate').val()) 
 	};
 	return result;
 }
@@ -190,14 +190,14 @@ function getCommitteData() {
 function parseRequestCode(code) {
 	var parts = code.split("-");
 	var result = {
-		leading_item: parts[0],
-		req_code: parts[1]
+		leading_item: parseInt(parts[0]),
+		req_code: parseInt(parts[1])
 	};
 	return result;
 }
 
 function getYearByTicks(ticks) {
-	var date = new Date(parseInt(ticks));
+	var date = new Date(ticks);
 	return date.getFullYear();
 }
 
@@ -211,7 +211,7 @@ function savePageData(pageId, type, requestCodes) {
 	var data = {
 		'pdf': committeeData.id,
 		'page': pageId,
-		'kind': type,
+		'kind': parseInt(type),
 		'request_id': requestCodes
 	};
 
@@ -234,8 +234,8 @@ function saveTransferData(requestCodeStr, articleId, amount, conditionalAmount) 
 		'leading_item': requestCode.leading_item,
 		'req_code': requestCode.req_code,
 		'budget_code': fixArticleId(articleId),
-		'net_expense_diff': amount,
-		'gross_expense_diff': conditionalAmount
+		'net_expense_diff': parseInt(amount),
+		'gross_expense_diff': parseInt(conditionalAmount)
 	};
 
 	$.ajax({
