@@ -133,6 +133,9 @@ header h1 {
 	border-bottom: 1px solid #181818;
 	background-color: #686868;
 	padding: 10px 20px;
+	position: fixed;
+	width: 100%;
+	z-index: 100;
 }
 #committeeHeader h3, #committeeHeader h4
 {
@@ -158,7 +161,8 @@ header h1 {
 #pagesCarousel .carousel-control 
 {	
 	top: auto;
-	bottom: 95px;
+	position: fixed;
+	bottom: 75px;
 	width: 0;
 	transition: opacity 0.5s;
 	-webkit-transition: opacity 0.5s; /* Safari */
@@ -180,15 +184,31 @@ header h1 {
 	text-align: center;
 	padding: 10px 0;
 	border-bottom: 1px solid #c4c4c4;
+	position: relative;
+	min-height: 500px;
+	width: 100%;
+	margin-bottom:300px;
+	margin-top: 120px;
 }
 .img_container img
 {
-	max-height: 330px;
+	transform: rotate(90deg);
+	-ms-transform: rotate(90deg);
+	-webkit-transform: rotate(90deg);
+	position: absolute;
+	top: 50%;
+	margin-top: -450px;
+	left: 50%;
+	margin-left: -318px;
 }
 
 .details_top
 {
 	padding: 7px 10px;
+	position: fixed;
+	bottom: 121px;
+	width: 100%;
+	background: #bbb;
 }
 .details_top .form-group, .details_bottom .form-group
 {
@@ -254,10 +274,13 @@ header h1 {
 }
 .details_bottom
 {
-	position: relative;
-	height: 170px;
+	position: fixed;
+	height: 122px;
 	border: solid #c4c4c4;
 	border-width: 1px 0;
+	bottom: 0;
+	width: 100%;
+	background: #fff;
 }
 .details_bottom_inner
 {	
@@ -266,6 +289,7 @@ header h1 {
 	border: solid #c4c4c4;
 	border-width: 0 1px;
 	height: 100%;
+	overflow: scroll;
 }
 .transfer_details ul li .form-group
 {
@@ -282,11 +306,10 @@ header h1 {
 	margin: 0;
 	display: inline-block;	
 	font-weight: bold;
-	text-decoration: underline;
 }
 .transfer_row
 {
-	margin-bottom: 7px;
+	margin-bottom: 0px;
 }
 .articleId
 {
