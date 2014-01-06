@@ -1,3 +1,14 @@
+function checkPDF(pdfId) {
+    $.get("/api/pdf/"+pdfId, function(data) {
+	pages = data.numPages;
+	done = data.done;
+	$("#message").html("מעבד את הקובץ... : "+pages+" דפים נמצאו");
+	if ( done ) {
+	    $("#submit-button").toggleClass("disabled", false);
+	}
+    }, "json");
+}
+
 $( document ).ready(function() {
     
     initPopop();
@@ -7,6 +18,7 @@ $( document ).ready(function() {
 	    $(e.target).datepicker('hide');
 	    var inputId = $(e.target).data('inputid');
 	    $('#' + inputId).val(Date.parse(e.date));
+	    $("#dropzone").css("visibility","visible");
 	});
     
     $('#dropzone').filedrop({
@@ -51,13 +63,14 @@ $( document ).ready(function() {
 	drop: function() {
 	},
 	uploadStarted: function(i, file, len){
-            // popup('העלאת הקובץ החלה', 'הודעה', 'alert');
+	    $("#message").html("טוען...");
 	},
 	uploadFinished: function(i, file, response, time) {
             if (response.success) {
 		$('#requestFileUrl').val(response.id);
-		popup('הקובץ נשמר', 'הודעה');
-            }
+		$("#message").html("מעבד את הקובץ...");
+		window.setInterval(checkPDF, 2000, response.id);
+	    }
 	},
 	progressUpdated: function(i, file, progress) {
             // this function is used for large files and updates intermittently

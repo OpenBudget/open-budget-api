@@ -11,7 +11,7 @@
     <h1>פותחים את ועדת הכספים</h1>
   </header>
 
-  <div id="dropzone">
+  <div id="dropzone" style="visibility:hidden">
     <div>גררו את ה-PDF לכאן <br>(או לחצו)</div>
   </div>
 
@@ -20,11 +20,13 @@
     <input type="text" class="form-control datepicker inline_input_heb text_size_m" id="committeeDate" data-inputId="committeeDateVal">
   </div>
 
+  <div id="message"></div>
+
   <form class="continue" action="committee" method="post" accept-charset="utf-8">
     <input type="file" id="uploadBtn" value="upload PDF" />
     <input type="hidden" name="committeeDateVal" id="committeeDateVal" />
     <input type="hidden" name="requestFileUrl" id="requestFileUrl" />
-    <input type="submit" class="btn btn-primary btn-large" value="המשך" />
+    <input type="submit" class="btn btn-primary btn-large disabled" value="המשך" id="submit-button"/>
   </form>
 </div>
 {% endblock content %}
