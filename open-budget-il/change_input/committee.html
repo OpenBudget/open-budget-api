@@ -16,18 +16,25 @@
   <div class="carousel-inner">
     {% for item in committee.committee_items %}
     
-    <div class="item" data-id="{{ item.id }}">
+    <div class="item table_view" data-id="{{ item.pageId }}">
       <div class="img_container">
-        <img src="{{ item.image }}" alt="page {{ item.id }}">
+        <img src="{{ item.image }}" alt="page {{ item.pageId }}">
       </div>    
       <div class="details_top clearfix">
-       <div class="form-group">
-        <label for="tableNum">בקשה מספר: </label>
-        <input type="text" class="form-control input-sm inline_input_heb text_size_xs" name="tableNum">
+        <div class="table_input">
+         <div class="form-group">
+          <label for="tableNum">בקשה מספר:</label>
+          <input type="text" class="form-control input-sm inline_input_heb text_size_xs" name="tableNum">
+        </div>
+      </div>
+      <div class="request_input">        
+          <label>בקשות:</label>
+          <ul>
+          </ul>
       </div>
       <div class="switch_container">
         <div class="switch_value request_table" data-value="2">טבלה</div>
-        <select class="request_table_select" tabindex="-1" test="{{ item.id }}">
+        <select class="request_table_select" tabindex="-1">
           <option value="1">בקשה</option>
           <option value="2">טבלה</option>
         </select> 
@@ -36,23 +43,20 @@
     </div>
     <div class="details_bottom">  
       <div class="details_bottom_inner">     
-        <div class="transfers_header">
-          <h5 class="articleId">מספר פרט</h5>
-          <h5 class="articleName">שם הפרט</h5>
-          <h5 class="amount">הוצאה</h5>
+        <div class="table_input">
+          <div class="transfers_header">
+            <h5 class="articleId">מספר פרט</h5>
+            <h5 class="articleName">שם הפרט</h5>
+            <h5 class="amount">הוצאה</h5>
+            <h5 class="amount_conditional">הוצאה מותנית</h5>
+          </div>
+          <ul class="transfers_list">
+          </ul>
         </div>
-        <ul>
-        </ul>
-      </div>      
-      <!-- <a class="glyphicon glyphicon-plus add_row"></a> -->          
+        <div class="request_input">
+        </div>
+      </div>             
     </div>
-    
-    <!-- <div class="transfer_details" data-id="{{ item.id }}">  -->       
-        <!-- <div class="btns_container">
-          <input type="button" class="btn btn-default page_details_btn" value="נקה הכל" name="btnClear" />
-          <input type="button" class="btn btn-default page_details_btn" value="שמור" name="btnSave" />
-        </div> -->
-
     </div>          
 
     {% endfor %} 
