@@ -6,19 +6,25 @@
 
 {% block content %}
 <div class="home_container">
-  <div class="form-group">
+ 
+  <header>
+    <h1>פותחים את ועדת הכספים</h1>
+  </header>
+
+  <div id="dropzone">
+    <div>גררו את ה-PDF לכאן <br>(או לחצו)</div>
+  </div>
+
+  <div id="committee-date" class="form-group">
     <label for="committeeDate">תאריך ועדה</label>
     <input type="text" class="form-control datepicker inline_input_heb text_size_m" id="committeeDate" data-inputId="committeeDateVal">
   </div>
- 
-  <div id="dropzone">
-    <h6>גרור קובץ או לחץ</h6>
-  </div>
-  <form action="committee" method="post" accept-charset="utf-8">
+
+  <form class="continue" action="committee" method="post" accept-charset="utf-8">
     <input type="file" id="uploadBtn" value="upload PDF" />
     <input type="hidden" name="committeeDateVal" id="committeeDateVal" />
     <input type="hidden" name="requestFileUrl" id="requestFileUrl" />
-    <input type="submit" class="btn btn-default" value="המשך" />
+    <input type="submit" class="btn btn-primary btn-large" value="המשך" />
   </form>
 </div>
 {% endblock content %}

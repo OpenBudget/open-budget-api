@@ -3,9 +3,20 @@
 	height: 100%;
 	box-sizing: border-box;
 }*/
+
+@import url(http://fonts.googleapis.com/earlyaccess/alefhebrew.css);
+
+*, h1,h2,h3,h4,h5,h6 {
+font-family: "Alef Hebrew",
+               “Helvetica Neue”,
+               Helvetica,
+               Arial,
+               sans-serif;
+}
+
 body
 {
-	padding: 0 200px;
+	background: #F3F3F3;
 }
 
 .clearfix:after 
@@ -74,25 +85,44 @@ body
 
 /*** home ***/
 
+header h1 {
+	margin: 15px 20px;
+	font-size: 24px;
+	font-weight: bold;
+}
+
+#committee-date{
+	position: absolute;
+	top: 10px;
+	left: 20px;
+	margin-bottom: 10px;
+}
+
+.continue{
+	position: absolute;
+	bottom: 10px;
+	left: 20px;
+}
+
+.continue .btn {
+	width: 160px;
+}
+
 #dropzone
 {
-	margin: 30px 0;
-	border: #aaaaaa 3px dashed;
-	width: 250px;
-	height: 250px;	
+	border: #ccc 6px dashed;
+	top: 55px; bottom: 55px; left: 20px; right: 20px;
+	position: absolute;
 	text-align: center;
 }
-#dropzone h6
+#dropzone div
 {
-	margin-top: 0;
-	line-height: 250px;
-	font-size: 11px;
-	font-style: italic;
-	color: #bbbbbb;
-}
-.home_container
-{
-	padding: 20px 0;
+	position: absolute;
+	top: 50%; left: 50%;
+	width: 180px;
+	margin-left: -90px;
+	font-size: 18px;
+	color: #999;
 }
 
 
