@@ -3,9 +3,20 @@
 	height: 100%;
 	box-sizing: border-box;
 }*/
+
+@import url(http://fonts.googleapis.com/earlyaccess/alefhebrew.css);
+
+*, h1,h2,h3,h4,h5,h6 {
+font-family: "Alef Hebrew",
+               “Helvetica Neue”,
+               Helvetica,
+               Arial,
+               sans-serif;
+}
+
 body
 {
-	padding: 0 200px;
+	background: #F3F3F3;
 }
 
 .clearfix:after 
@@ -74,25 +85,44 @@ body
 
 /*** home ***/
 
+header h1 {
+	margin: 15px 20px;
+	font-size: 24px;
+	font-weight: bold;
+}
+
+#committee-date{
+	position: absolute;
+	top: 10px;
+	left: 20px;
+	margin-bottom: 10px;
+}
+
+.continue{
+	position: absolute;
+	bottom: 10px;
+	left: 20px;
+}
+
+.continue .btn {
+	width: 160px;
+}
+
 #dropzone
 {
-	margin: 30px 0;
-	border: #aaaaaa 3px dashed;
-	width: 250px;
-	height: 250px;	
+	border: #ccc 6px dashed;
+	top: 55px; bottom: 55px; left: 20px; right: 20px;
+	position: absolute;
 	text-align: center;
 }
-#dropzone h6
+#dropzone div
 {
-	margin-top: 0;
-	line-height: 250px;
-	font-size: 11px;
-	font-style: italic;
-	color: #bbbbbb;
-}
-.home_container
-{
-	padding: 20px 0;
+	position: absolute;
+	top: 50%; left: 50%;
+	width: 180px;
+	margin-left: -90px;
+	font-size: 18px;
+	color: #999;
 }
 
 
@@ -103,6 +133,9 @@ body
 	border-bottom: 1px solid #181818;
 	background-color: #686868;
 	padding: 10px 20px;
+	position: fixed;
+	width: 100%;
+	z-index: 100;
 }
 #committeeHeader h3, #committeeHeader h4
 {
@@ -128,7 +161,8 @@ body
 #pagesCarousel .carousel-control 
 {	
 	top: auto;
-	bottom: 95px;
+	position: fixed;
+	bottom: 75px;
 	width: 0;
 	transition: opacity 0.5s;
 	-webkit-transition: opacity 0.5s; /* Safari */
@@ -150,15 +184,31 @@ body
 	text-align: center;
 	padding: 10px 0;
 	border-bottom: 1px solid #c4c4c4;
+	position: relative;
+	min-height: 500px;
+	width: 100%;
+	margin-bottom:300px;
+	margin-top: 120px;
 }
 .img_container img
 {
-	max-height: 330px;
+	transform: rotate(90deg);
+	-ms-transform: rotate(90deg);
+	-webkit-transform: rotate(90deg);
+	position: absolute;
+	top: 50%;
+	margin-top: -450px;
+	left: 50%;
+	margin-left: -318px;
 }
 
 .details_top
 {
 	padding: 7px 10px;
+	position: fixed;
+	bottom: 121px;
+	width: 100%;
+	background: #bbb;
 }
 .details_top .form-group, .details_bottom .form-group
 {
@@ -229,10 +279,13 @@ body
 }
 .details_bottom
 {
-	position: relative;
-	height: 170px;
+	position: fixed;
+	height: 122px;
 	border: solid #c4c4c4;
 	border-width: 1px 0;
+	bottom: 0;
+	width: 100%;
+	background: #fff;
 }
 .details_bottom_inner
 {	
@@ -241,6 +294,7 @@ body
 	border: solid #c4c4c4;
 	border-width: 0 1px;
 	height: 100%;
+	overflow: scroll;
 }
 .transfer_details ul li .form-group
 {
@@ -257,11 +311,10 @@ body
 	margin: 0;
 	display: inline-block;	
 	font-weight: bold;
-	text-decoration: underline;
 }
 .transfer_row
 {
-	margin-bottom: 7px;
+	margin-bottom: 0px;
 }
 .articleId
 {

@@ -12,7 +12,7 @@ from google.appengine.api import memcache
 from google.appengine.ext import ndb
 from google.appengine.ext import blobstore
 
-from models import BudgetLine, SupportLine, ChangeLine, SearchHelper
+from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage
 
 INFLATION = {1992: 2.338071159424868,
  1993: 2.1016785142253185,
@@ -88,7 +88,10 @@ class Update(webapp2.RequestHandler):
                 #self.response.write(code+"==>"+repr(prefixes)+"\n")
                 item["prefixes"] = prefixes
                 if item.get('date') is not None and item['date'] != "":
-                    item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
+                    try:
+                        item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
+                    except:
+                        item['date'] = datetime.fromtimestamp(item['date']/1000.0)
 
             if what == "sh":
                 dbitem = SearchHelper.query(SearchHelper.kind==item['kind'],SearchHelper.value==item['value'],SearchHelper.year==max(item['year'])).fetch(1000,batch_size=1000)
@@ -218,7 +221,7 @@ class ChangesApi(GenericApi):
     def get_query(self,*args,**kw):
         code = leading_item = req_code = year = None
         if len(args) == 1:
-            code = args
+            code = args[0]
         elif len(args) == 2:
             code, year = args
         elif len(args) == 3:
@@ -288,6 +291,19 @@ class SearchApi(GenericApi):
             return BudgetLine.query( ndb.OR(*conditions) )
             
         return None
+
+class PdfStatusApi(webapp2.RequestHandler):
+
+    def get(self,key):
+        self.response.headers['Content-Type'] = 'application/json'
+        pages = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(key)).fetch(100)
+        done = False
+        for page in pages:
+            if page.last == True:
+                done = True
+        ret = { 'numPages': len(pages),
+                'done' :  done }
+        self.response.write(json.dumps(ret))
 
 class ReportAll(webapp2.RequestHandler):
 
@@ -427,6 +443,7 @@ api = webapp2.WSGIApplication([
     ('/api/supports/([0-9]+)', SupportsApi),
     ('/api/search/([a-z]+)', SearchApi),
     ('/api/search/([a-z]+)/([0-9]+)', SearchApi),
+    ('/api/pdf/([^/]+)', PdfStatusApi),
 
     ('/api/update/([a-z]+)', Update)
 ], debug=True)
