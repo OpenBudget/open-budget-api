@@ -26,6 +26,7 @@ handlers:
 builtins:
 - remote_api: on
 - appstats: on
+- deferred: on
 
 libraries:
 - name: webapp2

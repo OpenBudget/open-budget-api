@@ -2,13 +2,15 @@ import os
 import urllib
 import json
 import logging
+import datetime
 
 from google.appengine.api import users
+from google.appengine.api import images
+from google.appengine.api import files
 from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
-from google.appengine.api import images
 from google.appengine.ext import ndb
-from google.appengine.api import files
+from google.appengine.ext import deferred
 
 import jinja2
 import webapp2
@@ -61,18 +63,34 @@ def extract_images_from_pdf(pdf):
         iend += endfix
         jpg = pdf[istart:iend]
         logging.info("Got one image %d-%d" % (istart,iend))
-     
-        img = images.Image(jpg)
-        if img.width < img.height:
-            jpg = images.rotate(jpg,90,quality=100)
-            yield jpg
-            jpg = images.rotate(jpg,180,quality=100)
-            yield jpg
-        else:
-            yield jpg
+        yield jpg
 
         i = iend
 
+def split_pdf_to_pages(pdf_key):
+    pdf = blobstore.BlobReader(pdf_key).read()
+
+    logging.info("Attmempting to extract images from PDF of %d bytes" % len(pdf))
+    pages = extract_images_from_pdf(pdf)
+
+    to_wait = []
+    last = None
+    for page in pages:
+        file_name = files.blobstore.create(mime_type='image/jpeg')
+        with files.open(file_name, 'a') as f:
+            f.write(page)
+        files.finalize(file_name)
+        blob_key = files.blobstore.get_blob_key(file_name)
+        
+        p = PreCommitteePage(pdf=pdf_key, page=blob_key)
+        to_wait.extend( ndb.put_multi_async([p]) )
+        last = p
+
+    ndb.Future.wait_all( to_wait )
+    
+    if last != None:
+        last.last = True
+        ndb.put_multi([last])
 
 class UploadFile(blobstore_handlers.BlobstoreUploadHandler):
     
@@ -81,23 +99,7 @@ class UploadFile(blobstore_handlers.BlobstoreUploadHandler):
         upload_files = self.get_uploads('file')  # 'file' is file upload field in the form
         blob_info = upload_files[0]
 
-        pdf = blobstore.BlobReader(blob_info.key()).read()
-
-        logging.info("Attmempting to extract images from PDF of %d bytes" % len(pdf))
-        pages = extract_images_from_pdf(pdf)
-
-        to_put = []
-        for page in pages:
-            logging.info("got an image")
-            file_name = files.blobstore.create(mime_type='image/jpeg')
-            with files.open(file_name, 'a') as f:
-                f.write(page)
-            files.finalize(file_name)
-            blob_key = files.blobstore.get_blob_key(file_name)
-            
-            p = PreCommitteePage(pdf=blob_info.key(), page=blob_key)
-            to_put.append(p)
-        ndb.put_multi(to_put)
+        deferred.defer(split_pdf_to_pages,blob_info.key(),_queue="pdfqueue")
             
         self.response.headers['Content-Type'] = 'application/json'   
         obj = {
@@ -139,11 +141,17 @@ class Request(webapp2.RequestHandler):
     def post(self):
         
         comDate = self.request.get("committeeDateVal")
-        fileUrl = self.request.get("requestFileUrl")
+        pdfId = self.request.get("requestFileUrl")
 
-        # TODO: break pdf to images and save request and its pages to DB
+        comDate = datetime.datetime.fromtimestamp(int(comDate)/1000.0)
+        to_put = []
+        for page in PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(pdfId)):
+            page.date = comDate
+            page.year = comDate.year
+            to_put.append(page)
+        ndb.put_multi(to_put)
         
-        query_params = {'pdfId': fileUrl}  # TODO:  replace with the created request's ID
+        query_params = {'pdfId': pdfId}  
         self.redirect('/change_input/committee?' + urllib.urlencode(query_params))
 
 

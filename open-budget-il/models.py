@@ -72,6 +72,7 @@ class PreCommitteePage(ndb.Model):
     pdf = ndb.BlobKeyProperty()
     page = ndb.BlobKeyProperty()
     year = ndb.IntegerProperty()
-    leading_item = ndb.IntegerProperty() 
-    req_code = ndb.IntegerProperty() 
+    request_id = ndb.StringProperty(repeated=True)  ## XX-YYY % (leading-item, req_code)
     date = ndb.DateProperty()
+    last = ndb.BooleanProperty()
+    kind = ndb.IntegerProperty() # 1 for request explanation, 2 for table
