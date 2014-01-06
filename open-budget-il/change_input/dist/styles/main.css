@@ -165,6 +165,11 @@ body
 	margin: 0;
 	display: inline-block;
 }
+.details_top input, .details_bottom input
+{
+	direction: ltr;
+	text-align: right;
+}
 .details_top ul, .details_bottom ul
 {
 	padding: 0;
@@ -269,13 +274,6 @@ body
 .amount, .amount_conditional
 {
 	width: 110px;
-}
-.amount input
-{
-	direction: ltr;
-	text-align: right;
-	/*font-family: "courier", serif;
-	letter-spacing: 2px;*/
 }
 .details_bottom .glyphicon.glyphicon-minus, .details_bottom .glyphicon.glyphicon-minus:active
 {	

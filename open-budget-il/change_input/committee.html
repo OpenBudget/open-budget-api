@@ -7,9 +7,10 @@
 {% block content %}
 
 <input type="hidden" id="committeeId" value="{{ committee.id }}" />
+<input type="hidden" id="committeeDate" value="{{ committee.committeeDate }}" />
 <div id="committeeHeader">
   <h3>תאריך ועדה:</h3>
-  <h4>{{ committee.committeeDate }}</h4>
+  <h4></h4>
 </div>
 
 <div id="pagesCarousel" class="carousel slide" data-ride="carousel">
@@ -21,13 +22,13 @@
         <img src="{{ item.image }}" alt="page {{ item.pageId }}">
       </div>    
       <div class="details_top clearfix">
-        <div class="table_input">
+        <div class="top_input table_input">
          <div class="form-group">
           <label for="tableNum">בקשה מספר:</label>
           <input type="text" class="form-control input-sm inline_input_heb text_size_xs" name="tableNum">
         </div>
       </div>
-      <div class="request_input">        
+      <div class="top_input request_input">        
           <label>בקשות:</label>
           <ul>
           </ul>

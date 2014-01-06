@@ -1,10 +1,10 @@
-var BUDGET_API_URL = 'http://the.open-budget.org.il/api/budget/';
+var BASE_URL = 'http://localhost:3003/';
 
 $( document ).ready(function() {
 
 	initPopop();
 
-	$('#committeeHeader h4').text(formatDate($('#committeeHeader h4').text()));
+	$('#committeeHeader h4').text(formatDate($('#committeeDate').val()));
 
 	$('#pagesCarousel .item').first().addClass('active');
 	$('.carousel').carousel({
@@ -57,9 +57,11 @@ $( document ).ready(function() {
 		var txt = $(this);
 		var articleId = txt.val();
 		var articleTextElm = txt.parents('.transfer_row').find('.articleName');
+		var date = getCommitteData().date;
+		var year = getYearByTicks(date);
 
 		$.ajax({
-			url: BUDGET_API_URL + articleId + "/2013",
+			url: BASE_URL + 'api/budget/' + fixArticleId(articleId) + "/" + year,
 			dataType: 'jsonp',
 			success: function(reponse) {
 				setArticleName(articleTextElm, reponse.title);
@@ -72,46 +74,32 @@ $( document ).ready(function() {
  		});
 	});
 
-	$('.item').delegate('input, select', 'change', function(e) {
-		var id = $(this).parents('.item').attr('data-id');		
-		// TODO: save transfer / page data
+	$('.details_top').delegate('input','change', function(e) {
+		var pageId = $(this).parents('.item').attr('data-id');
+		var type = $(this).parents('.details_top').find('.request_table_select').val();		
+		var requestCodes = [];
+		
+		var list = $(this).parents('.top_input').find('input');
+		list.each(function(index, item) {
+			value = $(item).val();
+			if (value.length)
+				requestCodes.push(value);
+		});
+		savePageData(pageId, type, requestCodes);
 	});
 
-	// $('.details_bottom .add_row').click(function(e) {
-	// 	var list = $(this).parents('.details_bottom').find('ul');
-	// 	addRow(list, getEmptyTransfer());
-	// });
-
-	// $('.btns_container input[name="btnClear"]').click(function(e) {
-	// 	var container = $(this).parents('.details_bottom');
-	// 	container.find('input[type="text"]').val('');
-	// 	container.find("li.transfer_row:not(:first)").remove();		
-	// });
-
-	// $('.btns_container input[name="btnSave"]').click(function(e) {
-	// 	var container = $(this).parents('.item');
-	// 	var data = {
-	// 		pageId: container.find('.details_bottom').data('id'),
-	// 		pageNumber: container.find('input[name="tableNum"]').val(),
-	// 		image: container.find('.img_container img').attr('src'),
-	// 		transfers: []
-	// 	};
+	$('.details_bottom').delegate('input','change', function(e) {
+		var articleId = $(this).val();
 		
-	// 	$.each(container.find('li.transfer_row'), function(index, li) {
-	// 		var id = $(li).find('input[name="articleId"]').val();
-	// 		var transferAmount = $(li).find('input[name="amount"]').val();
-	// 		if (id && transferAmount)
-	// 			data.transfers.push({
-	// 				articleId: id,
-	// 				amount: transferAmount
-	// 		});
-	// 	});
+		var row = $(this).parents('.transfer_row');
+		var articleId = row.find("input[name='articleId']").val();
+		var amount = row.find("input[name='amount']").val();
+		var cond_amount = row.find("input[name='amount_conditional']").val();
 
-	// 	$.post( "page", data, function(result) {
- //  			if (result.success)
- //  				popup('המידע נשמר', 'הודעה');
-	// 	});
-	// });
+		var requestCode = row.parents('.item').find("input[name='tableNum']").val();
+
+		saveTransferData(requestCode, articleId, amount, cond_amount);
+	});
 });
 
 function formatDate(ticks) {
@@ -189,4 +177,72 @@ function setArticleName(labelElm, name) {
 		labelElm.removeClass('not_found').html(name);
 	else
 		labelElm.addClass('not_found').html('לא ידוע');
+}
+
+function getCommitteData() {
+	var result = { 
+		id: $('#committeeId').val(), 
+		date: $('#committeeDate').val() 
+	};
+	return result;
+}
+
+function parseRequestCode(code) {
+	var parts = code.split("-");
+	var result = {
+		leading_item: parts[0],
+		req_code: parts[1]
+	};
+	return result;
+}
+
+function getYearByTicks(ticks) {
+	var date = new Date(parseInt(ticks));
+	return date.getFullYear();
+}
+
+function fixArticleId(articleId) {
+	var result = '';
+	return articleId.length == 6 ? "00" + articleId : articleId;
+}
+
+function savePageData(pageId, type, requestCodes) {
+	var committeeData = getCommitteData();
+	var data = {
+		'pdf': committeeData.id,
+		'page': pageId,
+		'kind': type,
+		'request_id': requestCodes
+	};
+
+	$.ajax({
+  		url: BASE_URL + 'api/update/pcp',
+  		type:"POST",
+  		data: JSON.stringify(data),
+  		contentType:"application/json; charset=utf-8",
+  		dataType:"json"
+	});
+}
+
+function saveTransferData(requestCodeStr, articleId, amount, conditionalAmount) {
+	var committeeData = getCommitteData();
+	var requestCode = parseRequestCode(requestCodeStr);
+
+	var data = {
+		'date': committeeData.date,
+		'year': getYearByTicks(committeeData.date),
+		'leading_item': requestCode.leading_item,
+		'req_code': requestCode.req_code,
+		'budget_code': fixArticleId(articleId),
+		'net_expense_diff': amount,
+		'gross_expense_diff': conditionalAmount
+	};
+
+	$.ajax({
+  		url: BASE_URL + 'api/update/cl',
+  		type:"POST",
+  		data: JSON.stringify(data),
+  		contentType:"application/json; charset=utf-8",
+  		dataType:"json"
+	});
 }
