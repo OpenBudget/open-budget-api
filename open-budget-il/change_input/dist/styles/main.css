@@ -190,15 +190,41 @@ header h1 {
 	margin-bottom:300px;
 	margin-top: 120px;
 }
+
 .img_container img
+{
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	margin-top: -318px;
+	margin-left: -450px;
+}
+
+.img_container img[data-rotate="90"]
 {
 	transform: rotate(90deg);
 	-ms-transform: rotate(90deg);
 	-webkit-transform: rotate(90deg);
-	position: absolute;
-	top: 50%;
+	-moz-transform: rotate(90deg);
 	margin-top: -450px;
-	left: 50%;
+	margin-left: -318px;
+}
+.img_container img[data-rotate="180"]
+{
+	transform: rotate(180deg);
+	-ms-transform: rotate(180deg);
+	-webkit-transform: rotate(180deg);
+	-moz-transform: rotate(180deg);
+	margin-top: -318px;
+	margin-left: -450px;
+}
+.img_container img[data-rotate="270"]
+{
+	transform: rotate(27deg);
+	-ms-transform: rotate(270deg);
+	-webkit-transform: rotate(270deg);
+	-moz-transform: rotate(270deg);
+	margin-top: -450px;
 	margin-left: -318px;
 }
 

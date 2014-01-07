@@ -114,7 +114,7 @@ class Request(webapp2.RequestHandler):
     def get(self):
 
         pdfId = self.request.get("pdfId")
-        comDate = self.request.get("committeeDateVal")
+        comDate = self.request.get("comDate")
 
         committee_items = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(pdfId))
         committee_items = [ { 'pageId' : str(f.page), 'image': images.get_serving_url(f.page,size=900,crop=False) } for f in committee_items ]

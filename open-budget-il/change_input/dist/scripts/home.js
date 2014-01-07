@@ -31,13 +31,13 @@ $( document ).ready(function() {
 		popup('הדפדפן אינו תומך בגרירת קבצים', 'שגיאה')
 		break;
             case 'TooManyFiles':
-		popup('לא ניתן להעלות יותר מ-25 קבצים', 'שגיאה')
+		popup('לא ניתן להעלות יותר מקובץ בודד', 'שגיאה')
 		break;
             case 'FileExtensionNotAllowed':           
 		popup('לא ניתן להעלות קבצים מסוג ' + file.name.split('.').pop(), 'שגיאה')
 		break;
             case 'FileTooLarge':
-		popup('הקובץ גדול מדי. גודל מרבי הינו 20 MB', 'שגיאה')
+		popup('הקובץ גדול מדי. גודל מרבי הינו 30 MB', 'שגיאה')
 		break;
             default:
 		popup('לא ניתן להעלות את הקובץ', 'שגיאה')
@@ -45,7 +45,7 @@ $( document ).ready(function() {
 	    }
 	},
 	allowedfiletypes: [],   // filetypes allowed by Content-Type.  Empty array means no restrictions
-	allowedfileextensions: ['.txt', '.pdf'], // file extensions allowed. Empty array means no restrictions
+	allowedfileextensions: ['.pdf'], // file extensions allowed. Empty array means no restrictions
 	maxfiles: 1,
 	maxfilesize: 30,    // max file size in MBs
 	dragOver: function() {
@@ -73,17 +73,15 @@ $( document ).ready(function() {
 	    }
 	},
 	progressUpdated: function(i, file, progress) {
-            // this function is used for large files and updates intermittently
-            // progress is the integer value of file being uploaded percentage to completion
 	},
 	globalProgressUpdated: function(progress) {
-            // progress for all the files uploaded on the current instance (percentage)
-            // ex: $('#progress div').width(progress+"%");
+	    $("#message").html("טוען... : "+progress+"%");
 	},
 	speedUpdated: function(i, file, speed) {
             // speed in kb/s
 	},
 	rename: function(name) {
+	    return "upload.pdf";
             // name in string format
             // must return alternate name as string
 	},

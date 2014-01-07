@@ -1,4 +1,4 @@
-var BASE_URL = 'http://localhost:3003/';
+var BASE_URL = 'http://the.open-budget.org.il/';
 
 $( document ).ready(function() {
 
@@ -100,6 +100,14 @@ $( document ).ready(function() {
 
 		saveTransferData(requestCode, articleId, amount, cond_amount);
 	});
+
+        $('img').click( function(e) {
+	    rotate = $(this).attr("data-rotate");
+	    rotate = parseInt(rotate);
+	    rotate += 90;
+	    rotate %= 360;
+	    $(this).attr("data-rotate", rotate);
+	} );
 });
 
 function formatDate(ticks) {
