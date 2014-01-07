@@ -114,6 +114,7 @@ class Request(webapp2.RequestHandler):
     def get(self):
 
         pdfId = self.request.get("pdfId")
+        comDate = self.request.get("committeeDateVal")
 
         committee_items = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(pdfId))
         committee_items = [ { 'pageId' : str(f.page), 'image': images.get_serving_url(f.page,size=900,crop=False) } for f in committee_items ]
@@ -122,9 +123,8 @@ class Request(webapp2.RequestHandler):
             'id': pdfId,
             'committee_items': committee_items,
             'committee_items_json': json.dumps(committee_items),
-            'committeeDate': 1388527200000,
-            'requestDate': 1388354400000
-        } # TODO: get this object from DB
+            'committeeDate': int(comDate)
+        } 
 
         if pdfId is None:
            template_values = {}
@@ -151,7 +151,7 @@ class Request(webapp2.RequestHandler):
             to_put.append(page)
         ndb.put_multi(to_put)
         
-        query_params = {'pdfId': pdfId}  
+        query_params = {'pdfId': pdfId, 'comDate': self.request.get("committeeDateVal") }  
         self.redirect('/change_input/committee?' + urllib.urlencode(query_params))
 
 
