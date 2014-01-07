@@ -98,6 +98,10 @@ header h1 {
 	margin-bottom: 10px;
 }
 
+.datepicker table {
+	direction: ltr;
+}
+
 .continue{
 	position: absolute;
 	bottom: 10px;
@@ -123,6 +127,14 @@ header h1 {
 	margin-left: -90px;
 	font-size: 18px;
 	color: #999;
+}
+
+#message {
+	position: fixed;
+	bottom: 12px;
+	right: 20px;
+	padding: 5px 10px;
+	margin-bottom: 0px;
 }
 
 
