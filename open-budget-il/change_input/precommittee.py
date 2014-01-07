@@ -143,7 +143,7 @@ class Request(webapp2.RequestHandler):
         comDate = self.request.get("committeeDateVal")
         pdfId = self.request.get("requestFileUrl")
 
-        comDate = datetime.datetime.fromtimestamp(int(comDate)/1000.0)
+        comDate = datetime.datetime.fromtimestamp(int(comDate)/1000.0+86400)
         to_put = []
         for page in PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(pdfId)):
             page.date = comDate

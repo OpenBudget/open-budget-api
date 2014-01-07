@@ -91,7 +91,7 @@ class Update(webapp2.RequestHandler):
                     try:
                         item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
                     except:
-                        item['date'] = datetime.datetime.fromtimestamp(item['date']/1000.0)
+                        item['date'] = datetime.datetime.fromtimestamp(item['date']/1000.0+86400)
 
             if what == "sh":
                 dbitem = SearchHelper.query(SearchHelper.kind==item['kind'],SearchHelper.value==item['value'],SearchHelper.year==max(item['year'])).fetch(1000,batch_size=1000)
