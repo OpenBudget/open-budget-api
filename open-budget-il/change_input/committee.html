@@ -82,7 +82,34 @@
 
 <script type="text/javascript" src="dist/bower_components/bootstrap/js/transition.js"></script>
 <script type="text/javascript" src="dist/bower_components/bootstrap/js/carousel.js"></script>
-<script type="text/javascript" src="dist/scripts/jquery.grow.js"></script>
+<script type="text/javascript" src="dist/scripts/underscore-min.js"></script>
 <script type="text/javascript" src="dist/scripts/committee.js?"></script>
 <script type="text/javascript" src="dist/scripts/switchy.js"></script>
+
+<script type="text/html" id="template-li-tableNum">
+<li style="display:inline-block;">
+        <div class="form-group">
+                <input type="text" class="form-control input-sm inline_input_heb text_size_xs" name="tablesNum" value="<%= table_code %>">
+        </div>
+</li>
+</script>
+
+<script type="text/html" id="template-li-transfer">
+<li class="transfer_row">
+  <div class="form-group articleId">
+    <input type="text" class="form-control input-sm inline_input_heb text_size_xs" name="articleId" value="<%=articleId%>">
+  </div>
+  <div class="form-group articleName">
+    <%=articleName%>
+  </div>
+  <div class="form-group amount">
+    <input type="text" class="form-control input-sm inline_input_heb text_size_xs" name="amount" value="<%=amount%>">
+  </div>
+  <div class="form-group amount_conditional">
+    <input type="text" class="form-control input-sm inline_input_heb text_size_xs" name="amount_conditional" value="<%=amount_conditional%>">
+  </div>
+  <a class="del_row glyphicon glyphicon-minus"></a>
+  <span class="result-indicator glyphicon"></span>
+</li>
+</script>
 {% endblock scripts %}

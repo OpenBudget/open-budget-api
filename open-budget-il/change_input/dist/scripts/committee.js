@@ -1,4 +1,4 @@
-var BASE_URL = 'http://the.open-budget.org.il/';
+var BASE_URL = '/';
 
 $( document ).ready(function() {
 
@@ -11,7 +11,7 @@ $( document ).ready(function() {
 		interval: false
 	});
 
-	populateItems($('.details_bottom ul'), data );
+        populateItems($('.details_bottom ul'), data );
 	addTableNum($('.details_top .request_input ul'), { table_code: ''})
 
 	$('.request_table_select').switchy();
@@ -44,8 +44,7 @@ $( document ).ready(function() {
 	$('.request_input').delegate('li:last-child input', 'change', function(e) {
 		var list = $(this).parents('ul');
 		addTableNum(list, {table_code: ''});
-		list.find('li:last-child').focus();
-
+	        window.setTimeout( function() { list.find('li:last-child input').focus(); }, 100 );
 	});
 
 	$('.details_bottom ul').delegate('li .del_row', 'click', function(e) {
@@ -64,9 +63,9 @@ $( document ).ready(function() {
 			url: BASE_URL + 'api/budget/' + fixArticleId(articleId) + "/" + year,
 			dataType: 'jsonp',
 			success: function(reponse) {
-				setArticleName(articleTextElm, reponse.title);
-				if (reponse.title && txt.parents('li').is(':last-child') && txt.val().length) 
-									addRow(txt.parents('ul.transfers_list'), getEmptyTransfer());
+			    setArticleName(articleTextElm, reponse.title);
+			    if (reponse.title && txt.parents('li').is(':last-child') && txt.val().length) 
+				addRow(txt.parents('ul.transfers_list'), getEmptyTransfer());
      		},
      		error: function(){
          		setArticleName(articleTextElm, null);
@@ -86,19 +85,26 @@ $( document ).ready(function() {
 				requestCodes.push(value);
 		});
 		savePageData(pageId, type, requestCodes);
+	        if ( type == 2 && requestCodes.length == 1) {
+		    populateChanges(  $(this).parents('.item').find('ul.transfers_list') ,requestCodes[0] );
+		}
 	});
 
 	$('.details_bottom').delegate('input','change', function(e) {
-		var articleId = $(this).val();
 		
+
 		var row = $(this).parents('.transfer_row');
+	        var knownArticleId = row.find(".articleName[data-budget='OK']").length > 0;
+	        var articleName = $.trim( row.find(".articleName").text() );
 		var articleId = row.find("input[name='articleId']").val();
 		var amount = row.find("input[name='amount']").val();
 		var cond_amount = row.find("input[name='amount_conditional']").val();
 
 		var requestCode = row.parents('.item').find("input[name='tableNum']").val();
 
-		saveTransferData(requestCode, articleId, amount, cond_amount);
+	        if ( knownArticleId ) {
+		    saveTransferData(requestCode, articleId, articleName, amount, cond_amount, row.find('.result-indicator'));
+		}
 	});
 
         $('img').click( function(e) {
@@ -119,72 +125,95 @@ function formatDate(ticks) {
 
 function addRow(listElm, data) {
 
-	listElm.grow({
-  		templateURL: 'dist/templates/li_transfer.html',
-  		cache: true,
-  		animation: 'slide',
-  		speed: 50
-	});
-
-	listElm.grow('append', data);
+    var template = $('#template-li-transfer').html();
+    var rendered = _.template(template, data);
+    listElm.append(rendered);
 }
 
 function getEmptyTransfer(str) {
-	return {id: null, articleId:'', amount:'', amount_conditional:''};
+	return {id: null, articleId:'', amount:'', amount_conditional:'', articleName:''};
+}
+
+function populateChanges( list, req_code ) {
+    var date = getCommitteData().date;
+    var year = getYearByTicks(date);
+    var template = $('#template-li-transfer').html();
+    list.html(_.template(template,getEmptyTransfer()));
+
+    $.ajax({
+  	url: BASE_URL + 'api/changes/'+req_code+'/'+year,
+  	dataType:"jsonp",
+	success: function(transfers) {
+	    var data = [];
+	    for (var j = 0; j < transfers.length; j++) {
+		data.push({
+		    articleId: transfers[j].budget_code.substring(2),
+		    articleName: transfers[j].budget_title,
+		    amount: transfers[j].net_expense_diff,
+		    amount_conditional: transfers[j].gross_expense_diff
+		});
+	    }
+	    data = _.sortBy(data, function(x) { return x.articleId; });
+	    data.push(getEmptyTransfer());
+	    list.html('');
+	    for (var j = 0; j < data.length; j++) {
+		var rendered = _.template(template,data[j]);
+		list.append(rendered);
+	    }
+	}
+    });
 }
 
 function populateItems(listElements, items) {
-	listElements.grow({
-		templateURL: 'dist/templates/li_transfer.html',
-		cache: true,
-		animation: 'slide',
-		speed: 10
-	});
-
-	var len = items.length;
-	for (var i = 0; i < len; i++) {		
-		populateItem(items[i])
-	}
+    var len = items.length;
+    for (var i = 0; i < len; i++) {		
+	populateItem(items[i])
+    }
 }
 
 function populateItem(item) {
 	var id = item.pageId;
-	var type = item.type || 2;
+	var type = item.kind || 2;
 	var meta = item.meta || {};
+        var req_codes = item.req_ids || [];
 
 	// TODO: populate hidden ID field and type select box
 	var container = $(".item[data-id='" + id + "']");
+        container.toggleClass('table_view', type == 2);
 	container.find('.request_table_select').val(type);
 
 	if(type == 1) {
-		// TODO: populate table numbers and date
-	} else {	
-		// TODO: populate table number
-		var transfers = meta.transfers || [getEmptyTransfer()];
-		var list = container.find('ul.transfers_list');		
-		for (var j = 0; j < transfers.length; j++) {
-			list.grow('append', transfers[j])
-		};
+	    var req_code_container = container.find('.request_input ul');
+	    var template = $('#template-li-tableNum').html();
+	    for ( var j = 0 ; j < req_codes.length ; j++ ) {
+		var rendered = _.template(template,{table_code: req_codes[j]});
+		req_code_container.append(rendered);
+	    }
+	} else {
+	    if ( req_codes.length == 1 ) {
+		var req_code = req_codes[0];
+		container.find(".table_input input[name='tableNum']").val(req_code);
+		populateChanges( container.find('ul.transfers_list'), req_code );
+	    }
 	}
 }
 
 function addTableNum(listElm, data) {
 
-	listElm.grow({
-  		templateURL: 'dist/templates/li_tableNum.html',
-  		cache: true,
-  		animation: 'slide',
-  		speed: 50
-	});
-
-	return listElm.grow('append', data);
+    var template = $('#template-li-tableNum').html();
+    var rendered = _.template(template,data);
+    
+    return listElm.append(rendered);
 }
 
 function setArticleName(labelElm, name) {
-	if (name)
+	if (name) {
 		labelElm.removeClass('not_found').html(name);
-	else
+	        labelElm.attr("data-budget","OK");
+	} else {
 		labelElm.addClass('not_found').html('לא ידוע');
+	        labelElm.attr("data-budget","");
+        }
 }
 
 function getCommitteData() {
@@ -232,7 +261,7 @@ function savePageData(pageId, type, requestCodes) {
 	});
 }
 
-function saveTransferData(requestCodeStr, articleId, amount, conditionalAmount) {
+function saveTransferData(requestCodeStr, articleId, articleName, amount, conditionalAmount, resultElement) {
 	var committeeData = getCommitteData();
 	var requestCode = parseRequestCode(requestCodeStr);
 
@@ -242,15 +271,22 @@ function saveTransferData(requestCodeStr, articleId, amount, conditionalAmount) 
 		'leading_item': requestCode.leading_item,
 		'req_code': requestCode.req_code,
 		'budget_code': fixArticleId(articleId),
+	        'budget_title': articleName,
 		'net_expense_diff': parseInt(amount),
 		'gross_expense_diff': parseInt(conditionalAmount)
 	};
-
+        resultElement.attr("class","result-indicator glyphicon glyphicon-cloud-upload");
 	$.ajax({
   		url: BASE_URL + 'api/update/cl',
   		type:"POST",
   		data: JSON.stringify(data),
   		contentType:"application/json; charset=utf-8",
-  		dataType:"json"
+  		dataType:"text",
+	        success: function() {
+		    resultElement.attr("class","result-indicator glyphicon glyphicon-ok");
+		},
+	        error: function() {
+		    resultElement.attr("class","result-indicator glyphicon glyphicon-remove");
+		},
 	});
 }

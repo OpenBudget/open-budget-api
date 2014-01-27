@@ -4,8 +4,12 @@ function checkPDF(pdfId) {
 	done = data.done;
 	$("#message").html("מעבד את הקובץ... : "+pages+" דפים נמצאו");
 	if ( done ) {
-	    $("#submit-button").toggleClass("disabled", false);
-	}
+	    if ( pages > 0 ) {
+		$("#submit-button").toggleClass("disabled", false);
+	    } else {
+		popup('לא נמצאו דפים בקובץ שהועלה', 'שגיאה');
+	    }
+	} 
     }, "json");
 }
 

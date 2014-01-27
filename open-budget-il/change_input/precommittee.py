@@ -11,11 +11,14 @@ from google.appengine.ext import blobstore
 from google.appengine.ext.webapp import blobstore_handlers
 from google.appengine.ext import ndb
 from google.appengine.ext import deferred
+from google.appengine.api import users
 
 import jinja2
 import webapp2
 
 from models import PreCommitteePage
+
+from secret import ALLOWED_EMAILS
 
 
 JINJA_ENVIRONMENT = jinja2.Environment(
@@ -26,6 +29,11 @@ JINJA_ENVIRONMENT = jinja2.Environment(
 class MainPage(webapp2.RequestHandler):
 
    def get(self):
+
+       user = users.get_current_user()
+       if not user or user.email() not in ALLOWED_EMAILS:
+           self.redirect(users.create_login_url(self.request.uri))
+           
        upload_url = blobstore.create_upload_url('/change_input/uploadFile')
        template_values = {
            'uploadURL': upload_url
@@ -48,21 +56,26 @@ def extract_images_from_pdf(pdf):
         istart = pdf.find(startmark, istream, istream+20)
         if istart < 0:
             i = istream+20
-            logging.info("couldn't find startmart of stream at %d: %r" % (istream,pdf[istream:istream+20]))
+            logging.info("couldn't find startmark of stream at %d: %r" % (istream,pdf[istream:istream+20]))
             continue
         iend = pdf.find("endstream", istart)
         if iend < 0:
+            i = istream+20
             logging.info("Didn't find end of stream!")
-            return
+            continue
         iend = pdf.find(endmark, iend-20)
         if iend < 0:
-            logging.info("Didn't find end of stream!")
-            return
+            i = iend
+            logging.info("Didn't find endmark of stream!")
+            continue
      
         istart += startfix
         iend += endfix
         jpg = pdf[istart:iend]
+
         logging.info("Got one image %d-%d" % (istart,iend))
+        if iend-istart < 10240:
+            continue
         yield jpg
 
         i = iend
@@ -90,7 +103,9 @@ def split_pdf_to_pages(pdf_key):
     
     if last != None:
         last.last = True
-        ndb.put_multi([last])
+    else:
+        last = PreCommitteePage(pdf=pdf_key, page=None, last=True)
+    ndb.put_multi([last])
 
 class UploadFile(blobstore_handlers.BlobstoreUploadHandler):
     
@@ -112,12 +127,22 @@ class UploadFile(blobstore_handlers.BlobstoreUploadHandler):
 class Request(webapp2.RequestHandler):
     
     def get(self):
+        
+        user = users.get_current_user()
+        if not user or user.email() not in ALLOWED_EMAILS:
+            self.abort(403)
 
         pdfId = self.request.get("pdfId")
         comDate = self.request.get("comDate")
 
         committee_items = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(pdfId))
-        committee_items = [ { 'pageId' : str(f.page), 'image': images.get_serving_url(f.page,size=900,crop=False) } for f in committee_items ]
+
+        committee_items = [ { 'pageId' : str(f.page), 
+                              'req_ids': f.request_id,
+                              'kind': f.kind,
+                              'image': images.get_serving_url(f.page,size=900,crop=False) } for f in committee_items ]
+        if len(committee_items) == 0:
+            self.abort(404)
 
         committee = {
             'id': pdfId,
@@ -126,20 +151,20 @@ class Request(webapp2.RequestHandler):
             'committeeDate': int(comDate)
         } 
 
-        if pdfId is None:
-           template_values = {}
-            # TODO: create a page with a list of all requests
-        else:
-            template_values = {                
-                'committee': committee
-            }
-            template_name = 'committee.html'
+        template_values = {                
+            'committee': committee
+        }
+        template_name = 'committee.html'
 
         template = JINJA_ENVIRONMENT.get_template(template_name)
         self.response.write(template.render(template_values))
 
     def post(self):
         
+        user = users.get_current_user()
+        if not user or user.email() not in ALLOWED_EMAILS:
+            self.abort(403)
+
         comDate = self.request.get("committeeDateVal")
         pdfId = self.request.get("requestFileUrl")
 
@@ -155,26 +180,9 @@ class Request(webapp2.RequestHandler):
         self.redirect('/change_input/committee?' + urllib.urlencode(query_params))
 
 
-class Page(webapp2.RequestHandler):
-
-    def post(self):
-
-        arr = self.request.POST.dict_of_lists()
-
-        # TODO: save post data to DB
-
-        self.response.headers['Content-Type'] = 'application/json'   
-        resp = {
-            'success': 'true'
-            # 'test': arr
-        } 
-        self.response.out.write(json.dumps(resp))
-
-
 
 application = webapp2.WSGIApplication([
     ('/change_input/', MainPage),
     ('/change_input/uploadFile', UploadFile),
     ('/change_input/committee', Request),
-    ('/change_input/page', Page)
 ], debug=True)

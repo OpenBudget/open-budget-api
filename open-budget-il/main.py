@@ -7,12 +7,15 @@ import jinja2
 import datetime
 import re
 import logging
+import urllib
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
 from google.appengine.ext import blobstore
+from google.appengine.api import users
 
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage
+from secret import ALLOWED_EMAILS, UPLOAD_KEY
 
 INFLATION = {1992: 2.338071159424868,
  1993: 2.1016785142253185,
@@ -48,7 +51,17 @@ class Update(webapp2.RequestHandler):
 
     def post(self,what):
         self.response.headers['Content-Type'] = 'text/plain'
-        to_update = self.request.body.split('\n')
+
+        key = self.request.get("apikey")
+        user = users.get_current_user()
+        if (user is None or user.email() not in ALLOWED_EMAILS) and key != UPLOAD_KEY:
+            self.abort(403)
+
+        body = urllib.unquote_plus(self.request.body)
+        print body
+        to_update = body.split('\n')
+        
+        
         to_update = [ json.loads(x) for x in to_update ]
         to_put = []
         to_delete = []
@@ -71,6 +84,8 @@ class Update(webapp2.RequestHandler):
                 item["depth"] = len(code)/2 - 1
 
             if what == "cl":
+                if item['year'] is None or item['leading_item'] is None or item['req_code'] is None or item['budget_code'] is None:
+                    self.abort(400)
                 dbitem = ChangeLine.query(ChangeLine.year==item['year'],
                                           ChangeLine.leading_item==item['leading_item'],
                                           ChangeLine.req_code==item['req_code'],
@@ -215,7 +230,6 @@ class BudgetApi(GenericApi):
 class ChangesApi(GenericApi):
 
     def key(self,*args,**kw):
-        print args,kw
         return "ChangesApi:%s" % "/".join(args)
 
     def get_query(self,*args,**kw):
@@ -226,7 +240,6 @@ class ChangesApi(GenericApi):
             code, year = args
         elif len(args) == 3:
             leading_item, req_code, year = args
-        print code,leading_item,req_code,year
         if year is not None:
             year = int(year)
             if code is not None:
@@ -234,7 +247,6 @@ class ChangesApi(GenericApi):
             else:
                 leading_item = int(leading_item)
                 req_code = int(req_code)
-                print "222",code,leading_item,req_code,year
                 lines = ChangeLine.query(ChangeLine.leading_item==leading_item,ChangeLine.req_code==req_code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
         else:
             lines = ChangeLine.query(ChangeLine.budget_code==code).order(-ChangeLine.year,-ChangeLine.date)
@@ -298,10 +310,15 @@ class PdfStatusApi(webapp2.RequestHandler):
         self.response.headers['Content-Type'] = 'application/json'
         pages = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(key)).fetch(100)
         done = False
+        pages = list(pages)
         for page in pages:
             if page.last == True:
                 done = True
-        ret = { 'numPages': len(pages),
+        if len(pages)==1 and pages[0].page is None:
+            ret = 0
+        else:
+            ret = len(pages)
+        ret = { 'numPages': ret,
                 'done' :  done }
         self.response.write(json.dumps(ret))
 
@@ -431,7 +448,6 @@ class Report(webapp2.RequestHandler):
             ret = "%s(%s);" % ( callback, ret )
         self.response.write(ret)
 
-            
 api = webapp2.WSGIApplication([
     ('/api/budget/([0-9]+)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)', BudgetApi),
@@ -444,11 +460,6 @@ api = webapp2.WSGIApplication([
     ('/api/search/([a-z]+)', SearchApi),
     ('/api/search/([a-z]+)/([0-9]+)', SearchApi),
     ('/api/pdf/([^/]+)', PdfStatusApi),
-
     ('/api/update/([a-z]+)', Update)
-], debug=True)
-report = webapp2.WSGIApplication([
-    ('/report/api/([0-9]{8})/([0-9]{4})', Report),
-    ('/report/all/([0-9]{4})', ReportAll),
 ], debug=True)
 
