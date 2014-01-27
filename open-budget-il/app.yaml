@@ -10,13 +10,23 @@ handlers:
 - url: /report/api/.*
   script: main.report
 - url: /report/app/
+  static_files: coming-soon/index.html
+  upload: webapp/dist/
+- url: /report/app/(.+)
+  static_files: coming-soon/\1
+  upload: coming-soon/
+- url: /report/go/
   static_files: webapp/dist/index.html
   upload: webapp/dist/
-- url: /report/all/.*
-  script: main.report
-- url: /report/app/(.+)
+- url: /report/go/(.+)
   static_files: webapp/dist/\1
   upload: webapp/dist/
+- url: /stg/
+  static_files: webapp/main/index.html
+  upload: webapp/main/
+- url: /stg/(.+)
+  static_files: webapp/main/\1
+  upload: webapp/main/
 
 - url: /change_input/dist
   static_dir: change_input/dist
