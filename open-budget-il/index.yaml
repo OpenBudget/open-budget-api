@@ -87,6 +87,21 @@ indexes:
 
 - kind: ChangeLine
   properties:
+  - name: prefixes
+  - name: year
+  - name: date
+    direction: desc
+
+- kind: ChangeLine
+  properties:
+  - name: prefixes
+  - name: year
+    direction: desc
+  - name: date
+    direction: desc
+
+- kind: ChangeLine
+  properties:
   - name: budget_code
   - name: year
   - name: date

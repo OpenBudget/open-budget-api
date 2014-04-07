@@ -14,7 +14,7 @@ from google.appengine.ext import ndb
 from google.appengine.ext import blobstore
 from google.appengine.api import users
 
-from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage
+from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, ChangeExplanation
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
 
 INFLATION = {1992: 2.338071159424868,
@@ -57,12 +57,15 @@ class Update(webapp2.RequestHandler):
         if (user is None or user.email() not in ALLOWED_EMAILS) and key != UPLOAD_KEY:
             self.abort(403)
 
-        body = urllib.unquote_plus(self.request.body)
-        print body
+        #body = urllib.unquote_plus(self.request.body)
+        body = self.request.body
+        body = body.strip()
         to_update = body.split('\n')
-        
-        
-        to_update = [ json.loads(x) for x in to_update ]
+        try:
+            to_update = [ json.loads(x) for x in to_update if x.strip() != '' ]
+        except Exception,e:
+            print body
+            raise
         to_put = []
         to_delete = []
         for item in to_update:
@@ -107,6 +110,42 @@ class Update(webapp2.RequestHandler):
                         item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
                     except:
                         item['date'] = datetime.datetime.fromtimestamp(item['date']/1000.0+86400)
+                    item['date'] = item['date'].date()
+
+            if what == "ex":
+                if item['year'] is None or item['leading_item'] is None or item['req_code'] is None:
+                    self.abort(400)
+                dbitem = ChangeExplanation.query(ChangeLine.year==item['year'],
+                                                 ChangeLine.leading_item==item['leading_item'],
+                                                 ChangeLine.req_code==item['req_code']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No change explanation for year=%(year)d, leading_item=%(leading_item)d, req_code=%(req_code)d" % item)
+                    dbitem = ChangeExplanation()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
+            if what == "sl":
+                if item["year"] is None or item["subject"] is None or item["code"] is None or item["recepient"] is None or item["kind"] is None or item["title"] is None:
+                    self.abort(400)
+                dbitem = SupportLine.query(SupportLine.year==item["year"],
+                                           SupportLine.subject==item["subject"],
+                                           SupportLine.code==item["code"],
+                                           SupportLine.recepient==item["recepient"],
+                                           SupportLine.kind==item["kind"],
+                                           SupportLine.title==item["title"]).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No support item for year=%(year)s, subject=%(subject)s, code=%(code)s, recepient=%(recepient)s, kind=%(kind)s, title=%(title)s" % item)
+                    dbitem = SupportLine()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+                code = item['code']
+                prefixes = [ code[:l] for l in range(2,len(code),2) ]
+                prefixes.append(code)
+                item["prefixes"] = prefixes
 
             if what == "sh":
                 dbitem = SearchHelper.query(SearchHelper.kind==item['kind'],SearchHelper.value==item['value'],SearchHelper.year==max(item['year'])).fetch(1000,batch_size=1000)
@@ -116,7 +155,7 @@ class Update(webapp2.RequestHandler):
                 else:
                     for x in dbitem[1:]:
                         to_delete.append(x)
-                    dbitem = dbitem[0]                  
+                    dbitem = dbitem[0]
                 item["prefix"] = None
 
             if what == "pcp":
@@ -127,13 +166,13 @@ class Update(webapp2.RequestHandler):
                 else:
                     for x in dbitem[1:]:
                         to_delete.append(x)
-                    dbitem = dbitem[0]                  
+                    dbitem = dbitem[0]
                 del item["pdf"]
                 del item["page"]
 
             def mysetattr(i,k,v):
                 orig_v = i.__getattribute__(k)
-                if type(orig_v) == list and type(v) == list: 
+                if type(orig_v) == list and type(v) == list:
                     orig_v.sort()
                     v.sort()
                     if json.dumps(orig_v) != json.dumps(v):
@@ -206,7 +245,7 @@ class GenericApi(webapp2.RequestHandler):
             ret = "%s(%s);" % ( callback, ret )
 
         self.response.write(ret)
-            
+
 class BudgetApi(GenericApi):
 
     def key(self,code,year=None,kind=None):
@@ -243,14 +282,27 @@ class ChangesApi(GenericApi):
         if year is not None:
             year = int(year)
             if code is not None:
-                lines = ChangeLine.query(ChangeLine.budget_code==code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
+                lines = ChangeLine.query(ChangeLine.prefixes==code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
             else:
                 leading_item = int(leading_item)
                 req_code = int(req_code)
                 lines = ChangeLine.query(ChangeLine.leading_item==leading_item,ChangeLine.req_code==req_code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
         else:
-            lines = ChangeLine.query(ChangeLine.budget_code==code).order(-ChangeLine.year,-ChangeLine.date)
+            lines = ChangeLine.query(ChangeLine.prefixes==code).order(-ChangeLine.year,-ChangeLine.date)
         return lines
+
+class ChangeExplApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "ChangesApi:%s" % "/".join(args)
+
+    def get_query(self,*args,**kw):
+        leading_item, req_code, year = args
+        year = int(year)
+        leading_item = int(leading_item)
+        req_code = int(req_code)
+        expl = ChangeExplanation.query(ChangeExplanation.leading_item==leading_item,ChangeExplanation.req_code==req_code,ChangeExplanation.year==year)
+        return expl
 
 class SupportsApi(GenericApi):
 
@@ -271,9 +323,9 @@ class SearchApi(GenericApi):
     def key(self,kind,year=None):
         queryString = self.request.get('q')
         return "SearchApi:%s/%s/%s" % (kind,year,queryString)
-    
+
     def get_query(self,kind,year=None):
-        
+
         queryString = self.request.get('q')
         parts = WORDS.findall(queryString)
         if kind == 'budget':
@@ -289,19 +341,19 @@ class SearchApi(GenericApi):
             part_codes = []
             for rec in query.fetch(self.limit,batch_size=self.limit):
                 part_codes.append((rec.value,year if year is not None else max(rec.year)))
-                
+
             #if codes is None:
             #    codes = part_codes
             #else:
             #    codes.intersection_update(part_codes)
-            
+
             codes = list(part_codes)
             #codes.sort( key=lambda(x): "%08d/%s" % (len(x[0]),x[0]) )
             #codes = codes[self.first:self.first+self.limit]
             conditions = [ ndb.AND( BudgetLine.code==code, BudgetLine.year==year) for code,year in codes ]
             conditions.append( BudgetLine.code=="non-existent-code" )
             return BudgetLine.query( ndb.OR(*conditions) )
-            
+
         return None
 
 class PdfStatusApi(webapp2.RequestHandler):
@@ -347,7 +399,7 @@ class Report(webapp2.RequestHandler):
     def get(self,code,year):
 
         callback = self.request.get('callback')
-        
+
         key = code+":"+year
         data = memcache.get(key)
         if data is not None:
@@ -361,20 +413,20 @@ class Report(webapp2.RequestHandler):
 
             ### async queries
             parent_codes = [ prefix for prefix in rec.prefixes if prefix != code and prefix != "00" ]
-            parent_query = BudgetLine.query(BudgetLine.code.IN(parent_codes), 
+            parent_query = BudgetLine.query(BudgetLine.code.IN(parent_codes),
                                             BudgetLine.year==year).fetch_async(batch_size=100)
             prefixes = [ prefix for prefix in rec.prefixes if prefix != "00" ]
             prefixes = [ (len(prefix)/2, prefix) for prefix in prefixes ]
             hierarchy_queries = [ (depth,
-                                   BudgetLine.query(code_starts_with(BudgetLine,prefix), 
-                                                    BudgetLine.year==year, 
+                                   BudgetLine.query(code_starts_with(BudgetLine,prefix),
+                                                    BudgetLine.year==year,
                                                     BudgetLine.depth==depth).order(BudgetLine.code).fetch_async(batch_size=500))
                                   for depth, prefix in prefixes ]
             history_query = BudgetLine.query(BudgetLine.code==code).fetch_async(batch_size=500)
             support_query = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.year).fetch_async(batch_size=500)
             changes_query = ChangeLine.query(ChangeLine.prefixes==code).order(-ChangeLine.year,-ChangeLine.date).fetch_async(batch_size=500)
 
-            ## parents 
+            ## parents
             parents = [ record.to_dict() for record in parent_query.get_result() ]
 
             ## hierarchy
@@ -397,7 +449,7 @@ class Report(webapp2.RequestHandler):
                 if rec.gross_revised is not None: to_add['gross_revised'] = rec.gross_revised*inf,
                 if rec.gross_used is not None: to_add['gross_used'] = rec.gross_used*inf,
                 history.append(to_add)
-            
+
             ## supports
             support_recs = [ record.to_dict() for record in support_query.get_result() ]
             supports = {}
@@ -434,10 +486,10 @@ class Report(webapp2.RequestHandler):
                          'personnel_max_diff': rec.personnel_max_diff } for rec in changes_query.get_result() ]
 
             ret = { 'code'    : repr(code),
-                    'rec'     : rec_data, 
-                    'parents' : parents, 
-                    'hierarchy' : by_depth, 
-                    'history' : history, 
+                    'rec'     : rec_data,
+                    'parents' : parents,
+                    'hierarchy' : by_depth,
+                    'history' : history,
                     'supports': supports,
                     'changes' : changes }
             ret = json.dumps(ret)
@@ -456,10 +508,10 @@ api = webapp2.WSGIApplication([
     ('/api/changes/([0-9]+)', ChangesApi),
     ('/api/changes/([0-9]+)/([0-9]+)', ChangesApi),
     ('/api/changes/([0-9][0-9])-([0-9][0-9][0-9])/([0-9]+)', ChangesApi),
+    ('/api/change_expl/([0-9][0-9])-([0-9][0-9][0-9])/([0-9]+)', ChangeExplApi),
     ('/api/supports/([0-9]+)', SupportsApi),
     ('/api/search/([a-z]+)', SearchApi),
     ('/api/search/([a-z]+)/([0-9]+)', SearchApi),
     ('/api/pdf/([^/]+)', PdfStatusApi),
     ('/api/update/([a-z]+)', Update)
 ], debug=True)
-

@@ -29,22 +29,22 @@ class SupportLine(ndb.Model):
     amount_supported = ndb.IntegerProperty()
     amount_allocated = ndb.IntegerProperty()
     num_used = ndb.IntegerProperty()
-    
+
     recepient = ndb.StringProperty()
-    
+
     prefixes = ndb.StringProperty(repeated=True)
 
 class ChangeLine(ndb.Model):
     """Single change line"""
     year = ndb.IntegerProperty()
-    leading_item = ndb.IntegerProperty() 
-    req_code = ndb.IntegerProperty() 
-    req_title = ndb.StringProperty() 
-    change_code = ndb.IntegerProperty() 
+    leading_item = ndb.IntegerProperty()
+    req_code = ndb.IntegerProperty()
+    req_title = ndb.StringProperty()
+    change_code = ndb.IntegerProperty()
     change_title = ndb.StringProperty()
     change_type_id = ndb.IntegerProperty()
-    change_type_name = ndb.StringProperty() 
-    committee_id = ndb.IntegerProperty() 
+    change_type_name = ndb.StringProperty()
+    committee_id = ndb.IntegerProperty()
     budget_code = ndb.StringProperty()
     budget_title = ndb.StringProperty()
     net_expense_diff = ndb.IntegerProperty()
@@ -53,9 +53,20 @@ class ChangeLine(ndb.Model):
     commitment_limit_diff = ndb.IntegerProperty()
     personnel_max_diff = ndb.FloatProperty()
     date = ndb.DateProperty()
-    explanation = ndb.TextProperty(indexed=False)
+    # 0  - approved
+    # 1  - approximate
+    # 10 - pending
+    date_type = ndb.IntegerProperty()
 
     prefixes = ndb.StringProperty(repeated=True)
+
+class ChangeExplanation(ndb.Model):
+    """Change request explanation"""
+    year = ndb.IntegerProperty()
+    leading_item = ndb.IntegerProperty()
+    req_code = ndb.IntegerProperty()
+
+    explanation = ndb.TextProperty(indexed=False)
 
 class SearchHelper(ndb.Model):
     """Text Search index"""
