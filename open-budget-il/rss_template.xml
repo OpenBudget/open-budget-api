@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0" xmlns:pkw="http://hasadna.org.il/rss/1.0/dtd">
+
+<channel>
+  <title>{{ title }}</title>
+  <link>http://the.open-budget.org.il</link>
+  <subtitle></subtitle>
+  <pkw:html_template><![CDATA[
+{{feed_template|safe}}]]>
+</pkw:html_template>
+  {% for item in items %}
+  <item>
+    <title>{{item.title}}</title>
+    <link></link>
+    <description>{{item.description|safe}}</description>
+    <pubDate>{{ pubdate }}</pubDate>
+    <pkw:score>{{ item.score }}</pkw:score>
+  </item>
+  {% endfor %}
+</channel>
+
+</rss>

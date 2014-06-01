@@ -1,5 +1,11 @@
 from google.appengine.ext import ndb
 
+class SystemProperty(ndb.Model):
+    """A system property"""
+    key = ndb.StringProperty()
+    value = ndb.JsonProperty(indexed=False)
+    last_modified = ndb.DateTimeProperty(auto_now=True)
+
 class BudgetLine(ndb.Model):
     """Single budget line"""
     code = ndb.StringProperty()
@@ -30,7 +36,10 @@ class SupportLine(ndb.Model):
     amount_allocated = ndb.IntegerProperty()
     num_used = ndb.IntegerProperty()
 
-    recepient = ndb.StringProperty()
+    recipient = ndb.StringProperty()
+
+    company_id = ndb.StringProperty()
+    ngo_id = ndb.StringProperty()
 
     prefixes = ndb.StringProperty(repeated=True)
 

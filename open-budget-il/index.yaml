@@ -131,6 +131,17 @@ indexes:
 - kind: SupportLine
   properties:
   - name: prefixes
-  - name: recepient
+  - name: recipient
   - name: kind
   - name: year
+
+- kind: ChangeLine
+  properties:
+  - name: date_type
+  - name: date
+
+- kind: ChangeLine
+  properties:
+  - name: change_type_id
+  - name: date_type
+  - name: date

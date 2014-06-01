@@ -14,7 +14,7 @@ from google.appengine.ext import ndb
 from google.appengine.ext import blobstore
 from google.appengine.api import users
 
-from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, ChangeExplanation
+from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, ChangeExplanation, SystemProperty
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
 
 INFLATION = {1992: 2.338071159424868,
@@ -70,6 +70,16 @@ class Update(webapp2.RequestHandler):
         to_delete = []
         for item in to_update:
             dbitem = None
+            if what == "sp":
+                dbitem = SystemProperty.query(SystemProperty.key==item['key']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No system property for key=%(key)s" % item)
+                    dbitem = SystemProperty()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
             if what == "bl":
                 dbitem = BudgetLine.query(BudgetLine.year==item['year'],BudgetLine.code==item['code']).fetch(1)
                 if len(dbitem) == 0:
@@ -127,16 +137,16 @@ class Update(webapp2.RequestHandler):
                     dbitem = dbitem[0]
 
             if what == "sl":
-                if item["year"] is None or item["subject"] is None or item["code"] is None or item["recepient"] is None or item["kind"] is None or item["title"] is None:
+                if item["year"] is None or item["subject"] is None or item["code"] is None or item["recipient"] is None or item["kind"] is None or item["title"] is None:
                     self.abort(400)
                 dbitem = SupportLine.query(SupportLine.year==item["year"],
                                            SupportLine.subject==item["subject"],
                                            SupportLine.code==item["code"],
-                                           SupportLine.recepient==item["recepient"],
+                                           SupportLine.recipient==item["recipient"],
                                            SupportLine.kind==item["kind"],
                                            SupportLine.title==item["title"]).fetch(1)
                 if len(dbitem) == 0:
-                    self.response.write("No support item for year=%(year)s, subject=%(subject)s, code=%(code)s, recepient=%(recepient)s, kind=%(kind)s, title=%(title)s" % item)
+                    self.response.write("No support item for year=%(year)s, subject=%(subject)s, code=%(code)s, recipient=%(recipient)s, kind=%(kind)s, title=%(title)s" % item)
                     dbitem = SupportLine()
                 else:
                     for x in dbitem[1:]:
@@ -291,10 +301,25 @@ class ChangesApi(GenericApi):
             lines = ChangeLine.query(ChangeLine.prefixes==code).order(-ChangeLine.year,-ChangeLine.date)
         return lines
 
+class ChangesPendingApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "ChangesPendingApi:%s" % "/".join(args)
+
+    def get_query(self,*args,**kw):
+        kind = args[0]
+        lines = None
+        if kind == 'all':
+            lines = ChangeLine.query(ChangeLine.date_type==10).order(ChangeLine.date)
+        if kind == 'committee':
+            lines = ChangeLine.query(ChangeLine.date_type==10,ChangeLine.change_type_id==2).order(ChangeLine.date)
+        return lines
+
+
 class ChangeExplApi(GenericApi):
 
     def key(self,*args,**kw):
-        return "ChangesApi:%s" % "/".join(args)
+        return "ChangeExplApi:%s" % "/".join(args)
 
     def get_query(self,*args,**kw):
         leading_item, req_code, year = args
@@ -310,7 +335,17 @@ class SupportsApi(GenericApi):
         return "SupportsApi:%s/%s/%s" % (code,year,kind)
 
     def get_query(self,code,year=None,kids=None):
-        lines = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.recepient,SupportLine.kind,SupportLine.year)
+        lines = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.recipient,SupportLine.kind,SupportLine.year)
+        return lines
+
+class SystemPropertyApi(GenericApi):
+
+    def key(self,key):
+        return "SystemPropertyApi:%s" % key
+
+    def get_query(self,key):
+        lines = SystemProperty.query(SystemProperty.key==key)
+        self.single = True
         return lines
 
 WORDS = re.compile(u'([א-ת0-9a-zA-Z]+)')
@@ -355,6 +390,31 @@ class SearchApi(GenericApi):
             return BudgetLine.query( ndb.OR(*conditions) )
 
         return None
+
+class PendingChangesRss(webapp2.RequestHandler):
+
+    def get(self):
+        self.response.headers['Content-Type'] = 'application/rss+xml'
+        rss_template = JINJA_ENVIRONMENT.get_template('rss_template.xml')
+        item_template = JINJA_ENVIRONMENT.get_template('webapp/email/email_item_template.jinja.html')
+        feed_template = file('webapp/email/email_template.mustache.html').read().decode('utf8')
+        rss_items = SystemProperty.query(SystemProperty.key=='rss_items').fetch(1)[0]
+        rss_update_time = rss_items.last_modified.isoformat()
+        rss_items = rss_items.value
+        rss_update_time = SystemProperty.query(SystemProperty.key=='rss_update_time').fetch(1)[0].value
+        rss_title = SystemProperty.query(SystemProperty.key=='rss_title').fetch(1)[0].value
+        for item in rss_items:
+            item['baseurl']='http://the.open-budget.org.il/static/email/'
+        rss_items = [ { 'title': item['title'],
+                        'description': item_template.render(item),
+                        'score': item['score'] } for item in rss_items ]
+        to_render = { 'title': rss_title,
+                      'pubdate': rss_update_time,
+                      'feed_template': feed_template,
+                      'items': rss_items }
+        out = rss_template.render(to_render)
+        self.response.write(out)
+
 
 class PdfStatusApi(webapp2.RequestHandler):
 
@@ -459,14 +519,14 @@ class Report(webapp2.RequestHandler):
                     supports[support_code] = {'code':support_code,
                                               'title':support['title'],
                                               'subject':support['subject'],
-                                              'recepients':{}}
-                recepient = supports[support_code]['recepients'].setdefault(support['recepient'],{})
-                recepient.setdefault('sum',0)
-                recepient.setdefault('count',0)
-                recepient['sum'] += support['amount_used']*INFLATION[support['year']] / INFLATION[2013]
-                recepient['count'] += 1
+                                              'recipients':{}}
+                recipient = supports[support_code]['recipients'].setdefault(support['recipient'],{})
+                recipient.setdefault('sum',0)
+                recipient.setdefault('count',0)
+                recipient['sum'] += support['amount_used']*INFLATION[support['year']] / INFLATION[2013]
+                recipient['count'] += 1
 
-                l = recepient.setdefault('kinds',{}).setdefault(support['kind'],[])
+                l = recipient.setdefault('kinds',{}).setdefault(support['kind'],[])
                 l.append({'year':support['year'],
                           'num_supported':support['num_supported'],
                           'amount_used':support['amount_used'],
@@ -506,12 +566,16 @@ api = webapp2.WSGIApplication([
     ('/api/budget/([0-9]+)/([0-9]+)/(kids)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(parents)', BudgetApi),
     ('/api/changes/([0-9]+)', ChangesApi),
+    ('/api/changes/pending/(all)', ChangesPendingApi),
+    ('/api/changes/pending/(committee)', ChangesPendingApi),
     ('/api/changes/([0-9]+)/([0-9]+)', ChangesApi),
     ('/api/changes/([0-9][0-9])-([0-9][0-9][0-9])/([0-9]+)', ChangesApi),
     ('/api/change_expl/([0-9][0-9])-([0-9][0-9][0-9])/([0-9]+)', ChangeExplApi),
     ('/api/supports/([0-9]+)', SupportsApi),
     ('/api/search/([a-z]+)', SearchApi),
     ('/api/search/([a-z]+)/([0-9]+)', SearchApi),
+    ('/api/sysprop/(.+)', SystemPropertyApi),
     ('/api/pdf/([^/]+)', PdfStatusApi),
-    ('/api/update/([a-z]+)', Update)
+    ('/api/update/([a-z]+)', Update),
+    ('/rss/changes/pending', PendingChangesRss)
 ], debug=True)
