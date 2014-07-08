@@ -77,6 +77,21 @@ class ChangeExplanation(ndb.Model):
 
     explanation = ndb.TextProperty(indexed=False)
 
+class ChangeGroup(ndb.Model):
+    """Aggregated change group"""
+    year = ndb.IntegerProperty()
+    group_id = ndb.StringProperty()
+    transfer_ids = ndb.StringProperty(repeated=True)
+    budget_codes = ndb.StringProperty(repeated=True)
+    req_titles = ndb.StringProperty(repeated=True)
+    prefixes = ndb.StringProperty(repeated=True)
+    titles = ndb.JsonProperty()
+    title_value = ndb.IntegerProperty()
+    title_template = ndb.StringProperty()
+    changes = ndb.JsonProperty()
+    date = ndb.DateProperty()
+    pending = ndb.BooleanProperty()
+
 class SearchHelper(ndb.Model):
     """Text Search index"""
     year = ndb.IntegerProperty(repeated=True)
@@ -96,3 +111,36 @@ class PreCommitteePage(ndb.Model):
     date = ndb.DateProperty()
     last = ndb.BooleanProperty()
     kind = ndb.IntegerProperty() # 1 for request explanation, 2 for table
+
+class CompanyRecord(ndb.Model):
+    """A single company record"""
+    registration_id = ndb.StringProperty()
+    registration_date = ndb.StringProperty()
+    registration_year = ndb.IntegerProperty()
+    name_heb = ndb.StringProperty()
+    name_eng = ndb.StringProperty()
+    description = ndb.StringProperty()
+    goals = ndb.StringProperty()
+    status = ndb.StringProperty()
+    kind = ndb.StringProperty()
+    kind_gov = ndb.StringProperty()
+    kind_restrictions = ndb.StringProperty()
+    last_report_year = ndb.IntegerProperty()
+    status_offender = ndb.StringProperty()
+    address_country = ndb.StringProperty()
+    address_city = ndb.StringProperty()
+    address_street = ndb.StringProperty()
+    address_house_num = ndb.StringProperty()
+    address_zipcode = ndb.StringProperty()
+    address_pob = ndb.StringProperty()
+    address_at = ndb.StringProperty()
+
+class NGORecord(ndb.Model):
+    """A single amuta record"""
+    amuta_id = ndb.StringProperty()
+    name_heb = ndb.StringProperty()
+    kind = ndb.StringProperty()
+    category = ndb.StringProperty()
+    founding_year = ndb.IntegerProperty()
+    essence = ndb.StringProperty()
+    objective = ndb.StringProperty()

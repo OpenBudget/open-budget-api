@@ -8,13 +8,15 @@ import datetime
 import re
 import logging
 import urllib
+import csv
+import StringIO
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
 from google.appengine.ext import blobstore
 from google.appengine.api import users
 
-from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, ChangeExplanation, SystemProperty
+from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
 
 INFLATION = {1992: 2.338071159424868,
@@ -122,6 +124,22 @@ class Update(webapp2.RequestHandler):
                         item['date'] = datetime.datetime.fromtimestamp(item['date']/1000.0+86400)
                     item['date'] = item['date'].date()
 
+            if what == "cg":
+                if item['year'] is None or item['group_id'] is None:
+                    self.abort(400)
+                dbitem = ChangeGroup.query(ChangeGroup.year==item['year'],
+                                           ChangeGroup.group_id==item['group_id']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No change group for year=%(year)d, group_id=%(group_id)s" % item)
+                    dbitem = ChangeGroup()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+                if item.get('date') is not None and item['date'] != "":
+                    item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
+                    item['date'] = item['date'].date()
+
             if what == "ex":
                 if item['year'] is None or item['leading_item'] is None or item['req_code'] is None:
                     self.abort(400)
@@ -137,16 +155,15 @@ class Update(webapp2.RequestHandler):
                     dbitem = dbitem[0]
 
             if what == "sl":
-                if item["year"] is None or item["subject"] is None or item["code"] is None or item["recipient"] is None or item["kind"] is None or item["title"] is None:
+                if item["year"] is None or item["code"] is None or item["recipient"] is None or item["kind"] is None or item["title"] is None:
                     self.abort(400)
                 dbitem = SupportLine.query(SupportLine.year==item["year"],
-                                           SupportLine.subject==item["subject"],
                                            SupportLine.code==item["code"],
                                            SupportLine.recipient==item["recipient"],
                                            SupportLine.kind==item["kind"],
-                                           SupportLine.title==item["title"]).fetch(1)
+                                           SupportLine.title==item["title"]).fetch(100)
                 if len(dbitem) == 0:
-                    self.response.write("No support item for year=%(year)s, subject=%(subject)s, code=%(code)s, recipient=%(recipient)s, kind=%(kind)s, title=%(title)s" % item)
+                    self.response.write("No support item for year=%(year)s, code=%(code)s, recipient=%(recipient)s, kind=%(kind)s, title=%(title)s" % item)
                     dbitem = SupportLine()
                 else:
                     for x in dbitem[1:]:
@@ -179,6 +196,26 @@ class Update(webapp2.RequestHandler):
                     dbitem = dbitem[0]
                 del item["pdf"]
                 del item["page"]
+
+            if what == "cr":
+                dbitem = CompanyRecord.query(CompanyRecord.registration_id==item['registration_id']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No company record for registration_id=%(registration_id)s" % item)
+                    dbitem = CompanyRecord()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
+            if what == "ngo":
+                dbitem = NGORecord.query(NGORecord.amuta_id==item['amuta_id']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No NGO record for amuta_id=%(amuta_id)s" % item)
+                    dbitem = NGORecord()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
 
             def mysetattr(i,k,v):
                 orig_v = i.__getattribute__(k)
@@ -213,7 +250,23 @@ class CustomJSONEncoder(json.JSONEncoder):
     def default(self,o):
         if type(o) == datetime.date:
             return o.strftime("%d/%m/%Y")
+        elif type(o) == datetime.datetime:
+            return o.isoformat()
         return json.JSONEncoder.default(self, o)
+
+def HTMLEncode(data, fields):
+    header = u"<thead>%s</thead>" % "".join( u"<th>%s</th>" % f for f in fields )
+    body = "".join( u"<tr>%s</tr>" % "".join( u"<td>%s</td>" % row[f] for f in fields ) for row in data )
+    table = "<table>%s<tbody>%s</tbody></table>" % (header,body)
+    return table.encode('utf8')
+
+def CSVEncode(data,fields):
+    output = StringIO.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(fields)
+    for row in data:
+        writer.writerow([unicode(row[f]).encode('utf8') for f in fields])
+    return output.getvalue()
 
 class GenericApi(webapp2.RequestHandler):
 
@@ -223,7 +276,6 @@ class GenericApi(webapp2.RequestHandler):
     def get(self,*args,**kw):
 
         self.single = False
-        self.response.headers['Content-Type'] = 'application/json'
         self.first = self.request.get('first')
         if self.first is not None and self.first != '':
             self.first = int(self.first)
@@ -234,8 +286,11 @@ class GenericApi(webapp2.RequestHandler):
             self.limit = int(self.limit)
         else:
             self.limit = 100
+        self.output_format = self.request.get('o')
+        if self.output_format not in ['html','json','csv']:
+            self.output_format = 'json'
 
-        key = self.key(*args,**kw)+"//%s/%s" % (self.first,self.limit)
+        key = self.key(*args,**kw)+"//%s/%s/%s" % (self.first,self.limit,self.output_format)
         data = memcache.get(key)
         if data is not None:
             ret = data.decode("zip")
@@ -245,14 +300,29 @@ class GenericApi(webapp2.RequestHandler):
                 ret = [ x.to_dict() for x in query.fetch(batch_size=self.first+self.limit,limit=self.limit,offset=self.first) ]
             else:
                 ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit) ]
-            if self.single and len(ret)>0:
-                ret = ret[0]
-            ret = CustomJSONEncoder().encode(ret)
+            if self.output_format == 'json':
+                self.response.headers['Content-Type'] = 'application/json'
+                if self.single and len(ret)>0:
+                    ret = ret[0]
+                ret = CustomJSONEncoder().encode(ret)
+            elif self.output_format == 'html':
+                self.response.headers['Content-Type'] = 'text/html'
+                fields = []
+                if len(ret)>0:
+                    fields = ret[0].keys()
+                ret = HTMLEncode(ret, fields)
+            elif self.output_format == 'csv':
+                self.response.headers['Content-Type'] = 'text/csv'
+                fields = []
+                if len(ret)>0:
+                    fields = ret[0].keys()
+                ret = CSVEncode(ret, fields)
             memcache.add(key, ret.encode("zip"), 30)
 
-        callback = self.request.get('callback')
-        if callback is not None and callback != "":
-            ret = "%s(%s);" % ( callback, ret )
+        if self.output_format == 'json':
+            callback = self.request.get('callback')
+            if callback is not None and callback != "":
+                ret = "%s(%s);" % ( callback, ret )
 
         self.response.write(ret)
 
@@ -301,6 +371,31 @@ class ChangesApi(GenericApi):
             lines = ChangeLine.query(ChangeLine.prefixes==code).order(-ChangeLine.year,-ChangeLine.date)
         return lines
 
+class ChangeGroupApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "ChangeGroupApi:%s" % "/".join(args)
+
+    def get_query(self,*args,**kw):
+        code = leading_item = req_code = year = None
+        if len(args) == 1:
+            code = args[0]
+        elif len(args) == 2:
+            code, year = args
+        if '-' in code:
+            transfer_id = code
+            self.single = True
+            code = None
+        if year is not None:
+            year = int(year)
+            if code is not None:
+                lines = ChangeGroup.query(ChangeGroup.prefixes==code,ChangeGroup.year==year).order(-ChangeGroup.date)
+            else:
+                lines = ChangeGroup.query(ChangeGroup.transfer_ids==transfer_id,ChangeGroup.year==year).order(-ChangeGroup.date)
+        else:
+            lines = ChangeGroup.query(ChangeGroup.prefixes==code).order(-ChangeGroup.date)
+        return lines
+
 class ChangesPendingApi(GenericApi):
 
     def key(self,*args,**kw):
@@ -310,9 +405,18 @@ class ChangesPendingApi(GenericApi):
         kind = args[0]
         lines = None
         if kind == 'all':
-            lines = ChangeLine.query(ChangeLine.date_type==10).order(ChangeLine.date)
+            lines = ChangeLine.query(ChangeLine.date_type==10).order(-ChangeLine.date)
         if kind == 'committee':
-            lines = ChangeLine.query(ChangeLine.date_type==10,ChangeLine.change_type_id==2).order(ChangeLine.date)
+            lines = ChangeLine.query(ChangeLine.date_type==10,ChangeLine.change_type_id==2).order(-ChangeLine.date)
+        return lines
+
+class ChangeGroupsPendingApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "ChangeGroupsPendingApi:%s" % "/".join(args)
+
+    def get_query(self,*args,**kw):
+        lines = ChangeGroup.query(ChangeGroup.pending==True).order(-ChangeGroup.date)
         return lines
 
 
@@ -327,15 +431,25 @@ class ChangeExplApi(GenericApi):
         leading_item = int(leading_item)
         req_code = int(req_code)
         expl = ChangeExplanation.query(ChangeExplanation.leading_item==leading_item,ChangeExplanation.req_code==req_code,ChangeExplanation.year==year)
+        self.single = True
         return expl
 
 class SupportsApi(GenericApi):
 
-    def key(self,code,year=None,kind=None):
-        return "SupportsApi:%s/%s/%s" % (code,year,kind)
+    def key(self,*args):
+        if args[0] == 'recipient':
+            return "SupportsApi:%s" % args[1].encode('hex')
+        else:
+            return "SupportsApi:%s" % args[0]
 
-    def get_query(self,code,year=None,kids=None):
-        lines = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.recipient,SupportLine.kind,SupportLine.year)
+    def get_query(self,*args):
+        if args[0] == 'recipient':
+            recipient = args[1].decode('utf8')
+            recipients = list(set([ recipient, recipient[:35] ]))
+            lines = SupportLine.query(SupportLine.recipient.IN(recipients)).order(SupportLine.code,SupportLine.kind,SupportLine.year)
+        else:
+            code = args[0]
+            lines = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.recipient,SupportLine.kind,SupportLine.year)
         return lines
 
 class SystemPropertyApi(GenericApi):
@@ -346,6 +460,19 @@ class SystemPropertyApi(GenericApi):
     def get_query(self,key):
         lines = SystemProperty.query(SystemProperty.key==key)
         self.single = True
+        return lines
+
+class CompanyNGOApi(GenericApi):
+
+    def key(self,kind,id):
+        return "CompanyNGOApi:%s/%s" % (kind,id)
+
+    def get_query(self,kind,id):
+        self.single = True
+        if kind == "company":
+            lines = CompanyRecord.query(CompanyRecord.registration_id==id)
+        elif kind == "ngo":
+            lines = NGORecord.query(NGORecord.amuta_id==id)
         return lines
 
 WORDS = re.compile(u'([א-ת0-9a-zA-Z]+)')
@@ -398,18 +525,23 @@ class PendingChangesRss(webapp2.RequestHandler):
         rss_template = JINJA_ENVIRONMENT.get_template('rss_template.xml')
         item_template = JINJA_ENVIRONMENT.get_template('webapp/email/email_item_template.jinja.html')
         feed_template = file('webapp/email/email_template.mustache.html').read().decode('utf8')
-        rss_items = SystemProperty.query(SystemProperty.key=='rss_items').fetch(1)[0]
-        rss_update_time = rss_items.last_modified.isoformat()
-        rss_items = rss_items.value
-        rss_update_time = SystemProperty.query(SystemProperty.key=='rss_update_time').fetch(1)[0].value
+        rss_item_ids = SystemProperty.query(SystemProperty.key=='rss_items').fetch(1)[0]
+        last_mod = rss_item_ids.last_modified
+        rss_item_ids = rss_item_ids.value
         rss_title = SystemProperty.query(SystemProperty.key=='rss_title').fetch(1)[0].value
-        for item in rss_items:
+        rss_items = []
+        for i in rss_item_ids:
+            item = SystemProperty.query(SystemProperty.key=='rss_items[%s]' % i).fetch(1)[0]
+            item = item.value
             item['baseurl']='http://the.open-budget.org.il/static/email/'
+            item['pubdate']=last_mod.isoformat()
+            rss_items.append(item)
         rss_items = [ { 'title': item['title'],
                         'description': item_template.render(item),
-                        'score': item['score'] } for item in rss_items ]
+                        'link': "http://the.open-budget.org.il/stg/#transfer/%s/%s" % (item['group_id'],item['group'][0][0]),
+                        'score': item['score'],
+                        'pubdate': item['pubdate'] } for item in rss_items ]
         to_render = { 'title': rss_title,
-                      'pubdate': rss_update_time,
                       'feed_template': feed_template,
                       'items': rss_items }
         out = rss_template.render(to_render)
@@ -570,8 +702,17 @@ api = webapp2.WSGIApplication([
     ('/api/changes/pending/(committee)', ChangesPendingApi),
     ('/api/changes/([0-9]+)/([0-9]+)', ChangesApi),
     ('/api/changes/([0-9][0-9])-([0-9][0-9][0-9])/([0-9]+)', ChangesApi),
+
+    ('/api/changegroup/([0-9]+)', ChangeGroupApi),
+    ('/api/changegroup/pending', ChangeGroupsPendingApi),
+    ('/api/changegroup/([0-9]+)/([0-9]+)', ChangeGroupApi),
+    ('/api/changegroup/([0-9][0-9]-[0-9][0-9][0-9])/([0-9]+)', ChangeGroupApi),
+
     ('/api/change_expl/([0-9][0-9])-([0-9][0-9][0-9])/([0-9]+)', ChangeExplApi),
     ('/api/supports/([0-9]+)', SupportsApi),
+    ('/api/supports/(recipient)/(.+)', SupportsApi),
+    ('/api/(company)_record/([0-9]+)', CompanyNGOApi),
+    ('/api/(ngo)_record/([0-9]+)', CompanyNGOApi),
     ('/api/search/([a-z]+)', SearchApi),
     ('/api/search/([a-z]+)/([0-9]+)', SearchApi),
     ('/api/sysprop/(.+)', SystemPropertyApi),

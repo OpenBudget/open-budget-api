@@ -11,12 +11,12 @@ handlers:
   script: main.api
 - url: /report/api/.*
   script: main.report
-- url: /report/app/
-  static_files: coming-soon/index.html
-  upload: webapp/dist/
-- url: /report/app/(.+)
-  static_files: coming-soon/\1
-  upload: coming-soon/
+- url: /email/
+  static_files: webapp/emaildist/index.html
+  upload: webapp/emaildist/
+- url: /email/(.+)
+  static_files: webapp/emaildist/\1
+  upload: webapp/emaildist/
 - url: /report/go/
   static_files: webapp/dist/index.html
   upload: webapp/dist/
@@ -51,4 +51,7 @@ libraries:
 
 instance_class: F4
 automatic_scaling:
-  max_pending_latency: 200ms
+  min_pending_latency: 200ms
+  max_pending_latency: 500ms
+  min_idle_instances: 0
+  max_idle_instances: 1

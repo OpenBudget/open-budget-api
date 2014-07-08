@@ -135,6 +135,19 @@ indexes:
   - name: kind
   - name: year
 
+- kind: SupportLine
+  properties:
+  - name: recipient
+  - name: code
+  - name: kind
+  - name: year
+  
+- kind: ChangeLine
+  properties:
+  - name: date_type
+  - name: date
+    direction: desc
+
 - kind: ChangeLine
   properties:
   - name: date_type
@@ -145,3 +158,34 @@ indexes:
   - name: change_type_id
   - name: date_type
   - name: date
+
+- kind: ChangeGroup
+  properties:
+  - name: transfer_ids
+  - name: year
+  - name: date
+    direction: desc
+
+- kind: ChangeGroup
+  properties:
+  - name: pending
+  - name: date
+    direction: desc
+
+- kind: ChangeGroup
+  properties:
+  - name: pending
+  - name: date
+
+- kind: ChangeGroup
+  properties:
+  - name: prefixes
+  - name: date
+    direction: desc
+
+- kind: ChangeGroup
+  properties:
+  - name: prefixes
+  - name: year
+  - name: date
+    direction: desc

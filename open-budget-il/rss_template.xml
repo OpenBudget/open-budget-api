@@ -2,18 +2,19 @@
 <rss version="2.0" xmlns:pkw="http://hasadna.org.il/rss/1.0/dtd">
 
 <channel>
-  <title>{{ title }}</title>
+  <title>על שולחן ועדת הכספים</title>
+  <subtitle>{{ title }}</subtitle>
   <link>http://the.open-budget.org.il</link>
-  <subtitle></subtitle>
+  <pkw:sender>פותחים את התקציב - הסדנא לידע ציבורי</pkw:sender>
   <pkw:html_template><![CDATA[
 {{feed_template|safe}}]]>
 </pkw:html_template>
   {% for item in items %}
   <item>
     <title>{{item.title}}</title>
-    <link></link>
+    <link>{{item.link}}</link>
     <description>{{item.description|safe}}</description>
-    <pubDate>{{ pubdate }}</pubDate>
+    <pubDate>{{ item.pubdate }}</pubDate>
     <pkw:score>{{ item.score }}</pkw:score>
   </item>
   {% endfor %}
