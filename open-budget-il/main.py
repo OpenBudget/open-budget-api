@@ -10,6 +10,7 @@ import logging
 import urllib
 import csv
 import StringIO
+import itertools
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
@@ -160,10 +161,9 @@ class Update(webapp2.RequestHandler):
                 dbitem = SupportLine.query(SupportLine.year==item["year"],
                                            SupportLine.code==item["code"],
                                            SupportLine.recipient==item["recipient"],
-                                           SupportLine.kind==item["kind"],
-                                           SupportLine.title==item["title"]).fetch(100)
+                                           SupportLine.kind==item["kind"]).fetch(100)
                 if len(dbitem) == 0:
-                    self.response.write("No support item for year=%(year)s, code=%(code)s, recipient=%(recipient)s, kind=%(kind)s, title=%(title)s" % item)
+                    self.response.write("No support item for year=%(year)s, code=%(code)s, recipient=%(recipient)s, kind=%(kind)s" % item)
                     dbitem = SupportLine()
                 else:
                     for x in dbitem[1:]:
@@ -296,10 +296,13 @@ class GenericApi(webapp2.RequestHandler):
             ret = data.decode("zip")
         else:
             query = self.get_query(*args,**kw)
-            if self.do_paging():
-                ret = [ x.to_dict() for x in query.fetch(batch_size=self.first+self.limit,limit=self.limit,offset=self.first) ]
+            if isinstance(query,ndb.Query):
+                if self.do_paging():
+                    ret = [ x.to_dict() for x in query.fetch(batch_size=self.first+self.limit,limit=self.limit,offset=self.first) ]
+                else:
+                    ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit) ]
             else:
-                ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit) ]
+                ret = query
             if self.output_format == 'json':
                 self.response.headers['Content-Type'] = 'application/json'
                 if self.single and len(ret)>0:
@@ -323,8 +326,15 @@ class GenericApi(webapp2.RequestHandler):
             callback = self.request.get('callback')
             if callback is not None and callback != "":
                 ret = "%s(%s);" % ( callback, ret )
+                self.response.headers['Content-Type'] = 'text/javascript'
 
+        self.response.headers['cache-control'] = 'public, max-age=3600'
         self.response.write(ret)
+
+aggregated_budget_fields = set(k for k,v in BudgetLine.__dict__.iteritems()
+                               if isinstance(v,ndb.IntegerProperty)  or isinstance(v,ndb.FloatProperty))
+aggregated_budget_fields.remove('year')
+aggregated_budget_fields.remove('depth')
 
 class BudgetApi(GenericApi):
 
@@ -342,6 +352,25 @@ class BudgetApi(GenericApi):
             elif kind == "parents":
                 parent_codes = [ code[:x] for x in range(2,len(code)+1,2) ]
                 lines = BudgetLine.query(BudgetLine.code.IN(parent_codes),BudgetLine.year==year)
+            elif kind == "equivs":
+                equiv_code = "E%s/%s" % (year,code)
+                _lines = BudgetLine.query(BudgetLine.equiv_code==equiv_code).order(BudgetLine.year).fetch(batch_size=50)
+                lines = []
+                by_year = itertools.groupby(_lines, lambda x:x.year)
+                for year, yearly in by_year:
+                    rec = { 'year': year,
+                            'code': code,
+                            'title': _lines[-1].title,
+                            'orig_codes':[] }
+                    base = dict((k,None) for k in aggregated_budget_fields)
+                    for item in yearly:
+                        for k,v in item.to_dict().iteritems():
+                            if k in aggregated_budget_fields and v is not None:
+                                rec.setdefault(k,0)
+                                rec[k] += v
+                        rec['orig_codes'].append(item.code)
+                    base.update(rec)
+                    lines.append(base)
         else:
             lines = BudgetLine.query(BudgetLine.code==code).order(BudgetLine.year)
         return lines
@@ -695,6 +724,7 @@ class Report(webapp2.RequestHandler):
 api = webapp2.WSGIApplication([
     ('/api/budget/([0-9]+)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)', BudgetApi),
+    ('/api/budget/([0-9]+)/([0-9]+)/(equivs)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(kids)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(parents)', BudgetApi),
     ('/api/changes/([0-9]+)', ChangesApi),

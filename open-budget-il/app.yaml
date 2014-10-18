@@ -38,6 +38,16 @@ handlers:
 - url: /change_input/.*
   script: change_input.precommittee.application
 
+- url: /gov/api.*
+  script: gov.gov
+- url: /gov/
+  static_files: gov/obudget.html
+  upload: gov/
+- url: /gov/(.+)
+  static_files: gov/\1
+  upload: gov/
+
+
 builtins:
 - remote_api: on
 - appstats: on
@@ -49,7 +59,7 @@ libraries:
 - name: jinja2
   version: latest
 
-instance_class: F4
+instance_class: F1
 automatic_scaling:
   min_pending_latency: 200ms
   max_pending_latency: 500ms

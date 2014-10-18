@@ -1,0 +1,21 @@
+apt-get git-core
+apt-get install python-setuptools
+apt-get install build-essential
+apt-get install libevent-dev
+apt-get install python-dev
+apt-get install libyaml-0-2
+apt-get install unoconv
+apt-get install python-lxml
+apt-get install libxml2-dev
+apt-get install libreoffice-l10n-he
+easy_install pyyaml
+easy_install gevent
+easy_install pyquery
+easy_install python-levenshtein
+git clone https://github.com/OpenBudget/open-budget-data
+
+export LC_ALL=en_US.UTF-8
+export LANG=en_US.UTF-8
+export LANGUAGE=en_US.UTF-8
+
+to .bashrc, .profile

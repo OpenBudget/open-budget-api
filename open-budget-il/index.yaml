@@ -22,6 +22,33 @@ indexes:
   - name: year
   - name: code
 
+- kind: BudgetLine
+  properties:
+  - name: depth
+  - name: code
+
+- kind: BudgetLine
+  properties:
+  - name: equiv_code
+  - name: year
+
+- kind: BudgetLine
+  properties:
+  - name: code
+  - name: year
+    direction: desc
+  - name: net_allocated
+    direction: desc
+
+- kind: BudgetLine
+  properties:
+  - name: depth
+  - name: prefixes
+  - name: year
+    direction: desc
+  - name: net_allocated
+    direction: desc
+
 - kind: SupportLine
   ancestor: no
   properties:
@@ -85,18 +112,39 @@ indexes:
   - name: year
   - name: depth
 
-- kind: ChangeLine
+- kind: BudgetLine
+  properties:
+  - name: equiv_code
+  - name: year
+
+- kind: ChangeGroup
+  properties:
+  - name: pending
+  - name: date
+
+- kind: ChangeGroup
+  properties:
+  - name: pending
+  - name: date
+    direction: desc
+
+- kind: ChangeGroup
+  properties:
+  - name: prefixes
+  - name: date
+    direction: desc
+
+- kind: ChangeGroup
   properties:
   - name: prefixes
   - name: year
   - name: date
     direction: desc
 
-- kind: ChangeLine
+- kind: ChangeGroup
   properties:
-  - name: prefixes
+  - name: transfer_ids
   - name: year
-    direction: desc
   - name: date
     direction: desc
 
@@ -109,9 +157,41 @@ indexes:
 
 - kind: ChangeLine
   properties:
+  - name: change_type_id
+  - name: date_type
+  - name: date
+
+- kind: ChangeLine
+  properties:
+  - name: date_type
+  - name: date
+
+- kind: ChangeLine
+  properties:
+  - name: date_type
+  - name: date
+    direction: desc
+
+- kind: ChangeLine
+  properties:
   - name: leading_item
   - name: req_code
   - name: year
+  - name: date
+    direction: desc
+
+- kind: ChangeLine
+  properties:
+  - name: prefixes
+  - name: year
+  - name: date
+    direction: desc
+
+- kind: ChangeLine
+  properties:
+  - name: prefixes
+  - name: year
+    direction: desc
   - name: date
     direction: desc
 
@@ -141,51 +221,3 @@ indexes:
   - name: code
   - name: kind
   - name: year
-  
-- kind: ChangeLine
-  properties:
-  - name: date_type
-  - name: date
-    direction: desc
-
-- kind: ChangeLine
-  properties:
-  - name: date_type
-  - name: date
-
-- kind: ChangeLine
-  properties:
-  - name: change_type_id
-  - name: date_type
-  - name: date
-
-- kind: ChangeGroup
-  properties:
-  - name: transfer_ids
-  - name: year
-  - name: date
-    direction: desc
-
-- kind: ChangeGroup
-  properties:
-  - name: pending
-  - name: date
-    direction: desc
-
-- kind: ChangeGroup
-  properties:
-  - name: pending
-  - name: date
-
-- kind: ChangeGroup
-  properties:
-  - name: prefixes
-  - name: date
-    direction: desc
-
-- kind: ChangeGroup
-  properties:
-  - name: prefixes
-  - name: year
-  - name: date
-    direction: desc

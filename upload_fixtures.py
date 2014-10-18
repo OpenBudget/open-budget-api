@@ -1,14 +1,16 @@
 import json
 import urllib2
 import sys
+import uuid
+
+API_KEY = "d262c9f9-a77e-4adb-b73a-ce818bb05b8b"
 
 def do_write(data,i,kind):
     try:
-        u = urllib2.urlopen('http://localhost:8080/api/update/%s' % kind, data).read()
+        u = urllib2.urlopen('http://localhost:8080/api/update/%s?apikey=%s' % (kind,API_KEY), data).read()
         print u,i
     except Exception,e:
         print "Failed to upload batch %d: %s" % (i,e)
-        print data
 
 if __name__=="__main__":
     lines = {'bl':[],'cl':[]}

@@ -15,13 +15,26 @@ class BudgetLine(ndb.Model):
     net_allocated = ndb.IntegerProperty()
     gross_allocated = ndb.IntegerProperty()
 
+    dedicated_allocated = ndb.IntegerProperty()
+    commitment_allocated = ndb.IntegerProperty()
+    personnel_allocated = ndb.FloatProperty()
+    contractors_allocated = ndb.FloatProperty()
+    amounts_allocated = ndb.IntegerProperty()
+
     net_revised = ndb.IntegerProperty()
     gross_revised = ndb.IntegerProperty()
+
+    dedicated_revised = ndb.IntegerProperty()
+    commitment_revised = ndb.IntegerProperty()
+    personnel_revised = ndb.FloatProperty()
+    contractors_revised = ndb.FloatProperty()
+    amounts_revised = ndb.IntegerProperty()
 
     net_used = ndb.IntegerProperty()
     gross_used = ndb.IntegerProperty()
 
     prefixes = ndb.StringProperty(repeated=True)
+    equiv_code = ndb.StringProperty(repeated=True)
     depth = ndb.IntegerProperty()
 
 class SupportLine(ndb.Model):
@@ -68,6 +81,7 @@ class ChangeLine(ndb.Model):
     date_type = ndb.IntegerProperty()
 
     prefixes = ndb.StringProperty(repeated=True)
+    equiv_code = ndb.StringProperty(repeated=True)
 
 class ChangeExplanation(ndb.Model):
     """Change request explanation"""
@@ -82,6 +96,7 @@ class ChangeGroup(ndb.Model):
     year = ndb.IntegerProperty()
     group_id = ndb.StringProperty()
     transfer_ids = ndb.StringProperty(repeated=True)
+    committee_ids = ndb.IntegerProperty(repeated=True)
     budget_codes = ndb.StringProperty(repeated=True)
     req_titles = ndb.StringProperty(repeated=True)
     prefixes = ndb.StringProperty(repeated=True)
