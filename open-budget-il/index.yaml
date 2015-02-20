@@ -112,11 +112,6 @@ indexes:
   - name: year
   - name: depth
 
-- kind: BudgetLine
-  properties:
-  - name: equiv_code
-  - name: year
-
 - kind: ChangeGroup
   properties:
   - name: pending
@@ -195,6 +190,22 @@ indexes:
   - name: date
     direction: desc
 
+- kind: ModelDocumentation
+  properties:
+  - name: model
+  - name: order
+
+- kind: ParticipantTimeline
+  properties:
+  - name: kind
+  - name: start_date
+
+- kind: ParticipantTimeline
+  properties:
+  - name: kind
+  - name: start_date
+    direction: desc
+
 - kind: SearchHelper
   properties:
   - name: kind
@@ -221,3 +232,56 @@ indexes:
   - name: code
   - name: kind
   - name: year
+
+- kind: SupportLine
+  properties:
+  - name: prefixes
+  - name: year
+  - name: recipient
+  - name: kind
+
+- kind: TrainingFlow
+  properties:
+  - name: flow
+  - name: index
+    direction: asc
+
+- kind: ChangeGroup
+  properties:
+  - name: equiv_code
+  - name: date
+    direction: desc
+
+- kind: SupportLine
+  properties:
+  - name: recipient
+  - name: year
+  - name: code
+  - name: kind
+
+- kind: SupportLine
+  properties:
+  - name: entity_id
+  - name: year
+    direction: desc
+
+- kind: SupportLine
+  properties:
+  - name: entity_id
+  - name: entity_kind
+  - name: year
+    direction: desc
+  - name: kind
+
+- kind: MRExemptionRecord
+  properties:
+  - name: entity_id
+  - name: entity_kind
+  - name: start_date
+    direction: desc
+
+- kind: MRExemptionRecord
+  properties:
+  - name: entity_id
+  - name: start_date
+    direction: desc

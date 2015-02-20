@@ -1,0 +1,4 @@
+cron:
+- description: periodic bugsense poll
+  url: /tasks/periodic
+  schedule: every 15 mins

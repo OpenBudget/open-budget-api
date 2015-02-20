@@ -17,7 +17,10 @@ from google.appengine.ext import ndb
 from google.appengine.ext import blobstore
 from google.appengine.api import users
 
-from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord
+from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
+from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation
+from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, BudgetApproval, TrainingFlow
+from models import MRExemptionRecord, MRExemptionRecordDocument, MRExemptionRecordHistory
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
 
 INFLATION = {1992: 2.338071159424868,
@@ -73,11 +76,129 @@ class Update(webapp2.RequestHandler):
         to_delete = []
         for item in to_update:
             dbitem = None
+            if what == "mr":
+                if item.get('supplier_id') is not None:
+                    item['supplier_id'] = str(item['supplier_id'])
+                docs = []
+                for doc in item.get('documents',[]):
+                    if doc['update_time'] != '-':
+                        doc['update_time'] = datetime.datetime.strptime("%(time)s %(date)s" % doc['update_time'],'%H:%M %d/%m/%Y')
+                    else:
+                        doc['update_time'] = None
+                    docs.append( MRExemptionRecordDocument(**doc) )
+                item['documents'] = docs
+                history_items = []
+                for history_item in item.get('history',[]):
+                    if history_item['date'] != '-':
+                        history_item['date'] = datetime.datetime.strptime(history_item['date'],'%d/%m/%Y').date()
+                    else:
+                        history_item['date'] = None
+                    history_item['from_value'] = history_item.get('from')
+                    if history_item['from_value'] is not None:
+                        del history_item['from']
+                    history_item['to_value'] = history_item.get('to')
+                    if history_item['to_value'] is not None:
+                        del history_item['to']
+                    if type(history_item['to_value']) is list or type(history_item['from_value']) is list:
+                        continue
+                    logging.debug("adding history item %r" % history_item )
+                    history_items.append( MRExemptionRecordHistory(**history_item) )
+                item['history'] = history_items
+
+                for f in ['start_date','end_date','claim_date','last_update_date']:
+                    d = item.get(f)
+                    if d is not None and d != '' and d != '-':
+                        item[f] = datetime.datetime.strptime(d,'%d/%m/%Y').date()
+                    else:
+                        item[f] = None
+
+                dbitem = MRExemptionRecord.query(MRExemptionRecord.publication_id==item['publication_id']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No exemption record for publication_id=%(publication_id)s" % item)
+                    dbitem = MRExemptionRecord()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
             if what == "sp":
                 dbitem = SystemProperty.query(SystemProperty.key==item['key']).fetch(1)
                 if len(dbitem) == 0:
                     self.response.write("No system property for key=%(key)s" % item)
                     dbitem = SystemProperty()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
+            if what == "md":
+                dbitem = ModelDocumentation.query(ModelDocumentation.model==item['model'],
+                                                  ModelDocumentation.field==item['field']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No ModelDocumentation for model=%(model)s field=%(field)s" % item)
+                    dbitem = ModelDocumentation()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
+            if what == "pp":
+                dbitem = ParticipantPhoto.query(ParticipantPhoto.name==item['name']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No ParticipantPhoto for name=%(name)s" % item)
+                    dbitem = ParticipantPhoto()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
+            if what == "tf":
+                dbitem = TrainingFlow.query(TrainingFlow.flow==item['flow'],TrainingFlow.index==item['index']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No TrainingFlow for flow=%(flow)s, index=%(index)s" % item)
+                    dbitem = TrainingFlow()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
+            if what == "ba":
+                if item.get('approval_date') is not None:
+                    item['approval_date'] = datetime.datetime.fromtimestamp(item['approval_date']).date()
+                if item.get('effect_date') is not None:
+                    item['effect_date'] = datetime.datetime.fromtimestamp(item['effect_date']).date()
+                if item.get('end_date') is not None:
+                    item['end_date'] = datetime.datetime.fromtimestamp(item['end_date']).date()
+                dbitem = BudgetApproval.query(BudgetApproval.year==item['year']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No BudgetApproval for year=%(year)s" % item)
+                    dbitem = BudgetApproval()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
+            if what == "pt":
+                if item.get('start_date') is not None:
+                    item['start_date'] = datetime.datetime.fromtimestamp(item['start_date']).date()
+                if item.get('end_date') is not None:
+                    item['end_date'] = datetime.datetime.fromtimestamp(item['end_date']).date()
+                dbitem = ParticipantTimeline.query(ParticipantTimeline.kind==item['kind'],
+                                                   ParticipantTimeline.name==item['full_title'],
+                                                   ParticipantTimeline.start_date==item['start_date']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No ParticipantTimeline for kind=%(kind)s full_title=%(full_title)s start_date=%(start_date)s" % item)
+                    dbitem = ParticipantTimeline()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
+            if what == "pm":
+                dbitem = ParticipantMapping.query(ParticipantMapping.budget_code==item['budget_code']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No ParticipantMapping for budget_code=%(budget_code)s" % item)
+                    dbitem = ParticipantMapping()
                 else:
                     for x in dbitem[1:]:
                         to_delete.append(x)
@@ -217,15 +338,34 @@ class Update(webapp2.RequestHandler):
                         to_delete.append(x)
                     dbitem = dbitem[0]
 
+            if what == "en":
+                try:
+                    item['creation_date'] = datetime.datetime.fromtimestamp(item['creation_date'])
+                except:
+                    item['creation_date'] = None
+                dbitem = Entity.query(Entity.id==item['id'],Entity.kind==item['kind']).fetch(1)
+                if len(dbitem) == 0:
+                    self.response.write("No Entity record for id=%(id)s kind=%(kind)s" % item)
+                    dbitem = Entity()
+                else:
+                    for x in dbitem[1:]:
+                        to_delete.append(x)
+                    dbitem = dbitem[0]
+
             def mysetattr(i,k,v):
                 orig_v = i.__getattribute__(k)
                 if type(orig_v) == list and type(v) == list:
-                    orig_v.sort()
-                    v.sort()
-                    if json.dumps(orig_v) != json.dumps(v):
+                    try:
+                        orig_v.sort()
+                        logging.debug("About to sort %s:%r" % (k,v))
+                        v.sort()
+                        if len(v) != len(orig_v) or any(x!=y for x,y in zip(v,orig_v)):
+                            i.__setattr__(k,v)
+                            self.response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
+                    except ValueError:
                         i.__setattr__(k,v)
-                        self.response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
-                        return True
+                        self.response.write("%s: %s: list != new list\n" % (i.key,k))
+                    return True
                 else:
                     if orig_v != v:
                         i.__setattr__(k,v)
@@ -252,29 +392,79 @@ class CustomJSONEncoder(json.JSONEncoder):
             return o.strftime("%d/%m/%Y")
         elif type(o) == datetime.datetime:
             return o.isoformat()
+        elif type(o) == set:
+            return list(o)
         return json.JSONEncoder.default(self, o)
 
 def HTMLEncode(data, fields):
-    header = u"<thead>%s</thead>" % "".join( u"<th>%s</th>" % f for f in fields )
-    body = "".join( u"<tr>%s</tr>" % "".join( u"<td>%s</td>" % row[f] for f in fields ) for row in data )
-    table = "<table>%s<tbody>%s</tbody></table>" % (header,body)
+    header = u"<thead>%s</thead>" % "".join( u"<th style='border: 1px solid black'>%s</th>" % f['he'] for f in fields )
+    body = "".join( u"<tr>%s</tr>" % "".join( u"<td style='border: 1px solid black'>%s</td>" % (row[f['field']] if row[f['field']] is not None else "") for f in fields ) for row in data )
+    table = "<table style='border-collapse:collapse'>%s<tbody>%s</tbody></table>" % (header,body)
     return table.encode('utf8')
 
 def CSVEncode(data,fields):
     output = StringIO.StringIO()
     writer = csv.writer(output)
-    writer.writerow(fields)
+    writer.writerow([f['he'].encode('utf8') for f in fields])
     for row in data:
-        writer.writerow([unicode(row[f]).encode('utf8') for f in fields])
+        writer.writerow([unicode(row[f['field']]).encode('utf8') for f in fields])
     return output.getvalue()
 
+def get_participants(budget_code,year=None,month=None,day=None):
+    code = budget_code[2:4]
+    ret = []
+    mapping = ParticipantMapping.query(ParticipantMapping.budget_code==code).fetch(1)
+    if len(mapping) > 0:
+        mapping = mapping[0]
+        participants = mapping.participants
+    else:
+        participants = []
+    participant_mapping = ['pm','finance']+participants+['fin_com']
+    date = None
+    if year is not None and month is not None and day is not None:
+        date = datetime.date(year=int(year),month=int(month),day=int(day))
+        participants = ParticipantTimeline.query(ParticipantTimeline.kind.IN(participant_mapping),ParticipantTimeline.start_date<=date).order(-ParticipantTimeline.start_date).fetch(50)
+    else:
+        participants = ParticipantTimeline.query(ParticipantTimeline.kind.IN(participant_mapping)).order(ParticipantTimeline.start_date).fetch(100)
+    for kind in participant_mapping:
+        kind_ret = []
+        for participant in participants:
+            if participant.kind == kind:
+                if date is None or participant.end_date is None or participant.end_date>date:
+                    rec = participant.to_dict()
+                    photo = ParticipantPhoto.query(ParticipantPhoto.name==participant.name).fetch(1)
+                    if len(photo)>0:
+                        photo_url = u"/api/thumbnail/%s" % participant.name
+                        photo_url = urllib.quote(photo_url.encode('utf8'))
+                        rec['photo_url'] = "http://the.open-budget.org.il" + photo_url
+                    kind_ret.append(rec)
+        kind_ret.sort(key=lambda(x):x['title'])
+        ret.extend(kind_ret)
+    return ret
+
 class GenericApi(webapp2.RequestHandler):
+
+    def _set_response_headers(self):
+        self.response.headers['Content-Type'] = 'application/json'
+        self.response.headers['Access-Control-Allow-Origin'] = "*"
+        self.response.headers['Access-Control-Max-Age'] = '604800'
+        self.response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, If-Match, If-Modified-Since, If-None-Match, If-Unmodified-Since, X-Requested-With, Cookie'
+        self.response.headers['Access-Control-Allow-Credentials'] = 'true'
 
     def do_paging(self):
         return True
 
-    def get(self,*args,**kw):
+    def getDocumentation(self,kind):
+        fields = ModelDocumentation.query(ModelDocumentation.model==kind,ModelDocumentation.order>=0).order(ModelDocumentation.order).fetch(25)
+        fields = [ r.to_dict() for r in fields ]
+        return fields
 
+    def options(self,*args,**kw):
+        self._set_response_headers()
+        self.response.write('{}')
+
+    def get(self,*args,**kw):
+        self._set_response_headers()
         self.single = False
         self.first = self.request.get('first')
         if self.first is not None and self.first != '':
@@ -290,10 +480,14 @@ class GenericApi(webapp2.RequestHandler):
         if self.output_format not in ['html','json','csv']:
             self.output_format = 'json'
 
-        key = self.key(*args,**kw)+"//%s/%s/%s" % (self.first,self.limit,self.output_format)
-        data = memcache.get(key)
+        data = None
+        key = self.key(*args,**kw)
+        if key is not None:
+            key = key + "//%s/%s/%s" % (self.first,self.limit,self.output_format)
+            data = memcache.get(key)
         if data is not None:
             ret = data.decode("zip")
+
         else:
             query = self.get_query(*args,**kw)
             if isinstance(query,ndb.Query):
@@ -304,31 +498,28 @@ class GenericApi(webapp2.RequestHandler):
             else:
                 ret = query
             if self.output_format == 'json':
-                self.response.headers['Content-Type'] = 'application/json'
+                self._set_response_headers()
                 if self.single and len(ret)>0:
                     ret = ret[0]
                 ret = CustomJSONEncoder().encode(ret)
             elif self.output_format == 'html':
-                self.response.headers['Content-Type'] = 'text/html'
-                fields = []
-                if len(ret)>0:
-                    fields = ret[0].keys()
-                ret = HTMLEncode(ret, fields)
+                ret = HTMLEncode(ret, self.getDocumentation(query.kind))
             elif self.output_format == 'csv':
-                self.response.headers['Content-Type'] = 'text/csv'
-                fields = []
-                if len(ret)>0:
-                    fields = ret[0].keys()
-                ret = CSVEncode(ret, fields)
-            memcache.add(key, ret.encode("zip"), 30)
+                ret = CSVEncode(ret, self.getDocumentation(query.kind))
+            if key is not None:
+                memcache.add(key, ret.encode("zip"), 86400)
 
         if self.output_format == 'json':
             callback = self.request.get('callback')
             if callback is not None and callback != "":
                 ret = "%s(%s);" % ( callback, ret )
                 self.response.headers['Content-Type'] = 'text/javascript'
+        elif self.output_format == 'html':
+            self.response.headers['Content-Type'] = 'text/html'
+        elif self.output_format == 'csv':
+            self.response.headers['Content-Type'] = 'text/csv'
 
-        self.response.headers['cache-control'] = 'public, max-age=3600'
+        self.response.headers['cache-control'] = 'public, max-age=600'
         self.response.write(ret)
 
 aggregated_budget_fields = set(k for k,v in BudgetLine.__dict__.iteritems()
@@ -338,10 +529,10 @@ aggregated_budget_fields.remove('depth')
 
 class BudgetApi(GenericApi):
 
-    def key(self,code,year=None,kind=None):
-        return "BudgetApi:%s/%s/%s" % (code,year,kind)
+    def key(self,code,year=None,kind=None,extra=None):
+        return "BudgetApi:%s/%s/%s/%s" % (code,year,kind,extra)
 
-    def get_query(self,code,year=None,kind=None):
+    def get_query(self,code,year=None,kind=None,extra=None):
         if year != None:
             year = int(year)
             if kind is None:
@@ -352,6 +543,9 @@ class BudgetApi(GenericApi):
             elif kind == "parents":
                 parent_codes = [ code[:x] for x in range(2,len(code)+1,2) ]
                 lines = BudgetLine.query(BudgetLine.code.IN(parent_codes),BudgetLine.year==year)
+            elif kind == "depth":
+                depth = int(extra)
+                lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.depth==depth,BudgetLine.year==year)
             elif kind == "equivs":
                 equiv_code = "E%s/%s" % (year,code)
                 _lines = BudgetLine.query(BudgetLine.equiv_code==equiv_code).order(BudgetLine.year).fetch(batch_size=50)
@@ -374,6 +568,14 @@ class BudgetApi(GenericApi):
         else:
             lines = BudgetLine.query(BudgetLine.code==code).order(BudgetLine.year)
         return lines
+
+class BudgetApprovalsApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "BudgetApprovalsApi:%s" % "/".join(args)
+
+    def get_query(self,budget_code):
+        return BudgetApproval.query().order(BudgetApproval.year)
 
 class ChangesApi(GenericApi):
 
@@ -406,11 +608,14 @@ class ChangeGroupApi(GenericApi):
         return "ChangeGroupApi:%s" % "/".join(args)
 
     def get_query(self,*args,**kw):
-        code = leading_item = req_code = year = None
+        code = leading_item = req_code = year = equivs = None
         if len(args) == 1:
             code = args[0]
         elif len(args) == 2:
             code, year = args
+        elif len(args) == 3:
+            code, year, equivs = args
+
         if '-' in code:
             transfer_id = code
             self.single = True
@@ -418,7 +623,11 @@ class ChangeGroupApi(GenericApi):
         if year is not None:
             year = int(year)
             if code is not None:
-                lines = ChangeGroup.query(ChangeGroup.prefixes==code,ChangeGroup.year==year).order(-ChangeGroup.date)
+                if equivs is not None:
+                    equiv_code = "E%s/%s" % (year,code)
+                    lines = ChangeGroup.query(ChangeGroup.equiv_code==equiv_code).order(-ChangeGroup.date)
+                else:
+                    lines = ChangeGroup.query(ChangeGroup.prefixes==code,ChangeGroup.year==year).order(-ChangeGroup.date)
             else:
                 lines = ChangeGroup.query(ChangeGroup.transfer_ids==transfer_id,ChangeGroup.year==year).order(-ChangeGroup.date)
         else:
@@ -463,22 +672,90 @@ class ChangeExplApi(GenericApi):
         self.single = True
         return expl
 
+class ExemptionsApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "ExemptionsApi:%s" % "/".join(args)
+
+    def get_query(self,*args,**kw):
+        publication_id = args[0]
+        publication_id = int(publication_id)
+        lines = MRExemptionRecord.query(MRExemptionRecord.publication_id==publication_id)
+        self.single = True
+        return lines
+
 class SupportsApi(GenericApi):
 
     def key(self,*args):
         if args[0] == 'recipient':
-            return "SupportsApi:%s" % args[1].encode('hex')
+            if len(args)>2:
+                return "SupportsApi:%s/%s" % (args[1].encode('hex'),args[2])
+            else:
+                return "SupportsApi:%s" % args[1].encode('hex')
         else:
-            return "SupportsApi:%s" % args[0]
+            return "SupportsApi:%s" % "/".join([str(a) for a in args])
+
+    def aggregate_lines(self,lines,aggregate_fields=['title']):
+        ret = {}
+        sum_fields = ['amount_supported','amount_allocated','num_used']
+        collect_fields = ['entity_kind','recipient','entity_id']
+
+        items, next_curs, more = lines.fetch_page(100)
+        while len(items) > 0:
+            for item in items:
+                item = item.to_dict()
+                key = item['title']
+                rec = ret.setdefault(key,{f:item[f] for f in aggregate_fields})
+                for f in sum_fields:
+                    rec[f] = rec.setdefault(f,0) + item[f]
+                collected = tuple(item[f] for f in collect_fields)
+                rec.setdefault('collected',set()).add(collected)
+                rec.setdefault('collected_fields',collect_fields)
+            if more:
+                items, next_curs, more = lines.fetch_page(100,start_cursor=next_curs)
+            else:
+                break
+
+        return ret.values()
 
     def get_query(self,*args):
         if args[0] == 'recipient':
             recipient = args[1].decode('utf8')
             recipients = list(set([ recipient, recipient[:35] ]))
-            lines = SupportLine.query(SupportLine.recipient.IN(recipients)).order(SupportLine.code,SupportLine.kind,SupportLine.year)
+            if len(args)>2:
+                year=int(args[2])
+                lines = SupportLine.query(SupportLine.year==year,SupportLine.recipient.IN(recipients)).order(SupportLine.code,SupportLine.kind,SupportLine.year)
+            else:
+                lines = SupportLine.query(SupportLine.recipient.IN(recipients)).order(SupportLine.code,SupportLine.kind,SupportLine.year)
+        elif args[0] == 'kind':
+            logging.error('SupportsApi:kind args=%r' % (args,))
+            kind = args[1]
+            if len(args)>2:
+                code = args[2]
+                if len(args)>3:
+                    if args[3] == 'aggregated':
+                        lines = SupportLine.query(SupportLine.entity_kind==kind,SupportLine.prefixes==code)
+                        lines = self.aggregate_lines(lines,['title'])
+                    else:
+                        year = int(args[3])
+                        lines = SupportLine.query(SupportLine.entity_kind==kind,SupportLine.prefixes==code,SupportLine.year==year)
+                        logging.error('SupportsApi:kind args=%r' % (args,))
+                        if len(args)>4:
+                            if args[4] == 'aggregated':
+                                lines = self.aggregate_lines(lines,['title','year'])
+                            else:
+                                assert(False)
+                else:
+                    lines = SupportLine.query(SupportLine.entity_kind==kind,SupportLine.prefixes==code)
+            else:
+                lines = SupportLine.query(SupportLine.entity_kind==kind)
         else:
             code = args[0]
-            lines = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.recipient,SupportLine.kind,SupportLine.year)
+            if len(args)>1:
+                year=int(args[1])
+                lines = SupportLine.query(SupportLine.year==year,SupportLine.prefixes==code).order(SupportLine.recipient,SupportLine.kind,SupportLine.year)
+            else:
+                lines = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.recipient,SupportLine.kind,SupportLine.year)
         return lines
 
 class SystemPropertyApi(GenericApi):
@@ -490,6 +767,23 @@ class SystemPropertyApi(GenericApi):
         lines = SystemProperty.query(SystemProperty.key==key)
         self.single = True
         return lines
+
+class EntityApi(GenericApi):
+
+    def key(self,id):
+        return "Entity:%s" % id
+
+    def get_query(self,id):
+        lines = Entity.query(Entity.id==id).fetch(1)
+        if len(lines)>0:
+            ret = lines[0].to_dict()
+            supports = SupportLine.query(SupportLine.entity_id==id).order(-SupportLine.year).fetch(1000)
+            ret['supports'] = [x.to_dict() for x in supports]
+            exemptions = MRExemptionRecord.query(MRExemptionRecord.entity_id==id).order(-MRExemptionRecord.start_date).fetch(1000)
+            ret['exemptions'] = [x.to_dict() for x in exemptions]
+            return ret
+        else:
+            return {}
 
 class CompanyNGOApi(GenericApi):
 
@@ -504,6 +798,40 @@ class CompanyNGOApi(GenericApi):
             lines = NGORecord.query(NGORecord.amuta_id==id)
         return lines
 
+class ParticipantApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "ParticipantApi:%s" % "/".join(args)
+
+    def get_query(self,budget_code,year=None,month=None,day=None):
+        return get_participants(budget_code,year,month,day)
+
+class TrainingFlowApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "TrainingFlowApi:%s" % "/".join(args)
+
+    def get_query(self,flow):
+        return TrainingFlow.query(TrainingFlow.flow==flow).order(TrainingFlow.index)
+
+class ThumbnailApi(webapp2.RequestHandler):
+
+    def get(self,name):
+        name=name.decode('utf8')
+        photo = ParticipantPhoto.query(ParticipantPhoto.name==name).fetch(1)
+        if len(photo)>0:
+            photo = photo[0]
+        else:
+            logging.info("can't find photo for name %r" % name)
+            self.abort(403)
+        self.response.headers['Content-Type'] = 'image/png'
+        self.response.headers['cache-control'] = 'public, max-age=86400'
+        data = photo.photo_url
+        if data.startswith('data'):
+            data = data.split(',',1)[1]
+        data = data.decode('base64')
+        self.response.write(data)
+
 WORDS = re.compile(u'([א-ת0-9a-zA-Z]+)')
 
 class SearchApi(GenericApi):
@@ -511,13 +839,25 @@ class SearchApi(GenericApi):
     def do_paging(self):
         return False
 
+    def get_querystr(self):
+        try:
+            return self.request.get('q')
+        except:
+            qs = self.request.query_string
+            if 'q=' in qs:
+                qs = qs[qs.index('q=')+2:]
+                qs = qs.split('&')[0]
+                return urllib.unquote(qs).decode('windows-1255')
+            else:
+                return None
+
     def key(self,kind,year=None):
-        queryString = self.request.get('q')
+        queryString = self.get_querystr()
         return "SearchApi:%s/%s/%s" % (kind,year,queryString)
 
     def get_query(self,kind,year=None):
 
-        queryString = self.request.get('q')
+        queryString = self.get_querystr()
         parts = WORDS.findall(queryString)
         if kind == 'budget':
             codes = None
@@ -594,6 +934,11 @@ class PdfStatusApi(webapp2.RequestHandler):
         ret = { 'numPages': ret,
                 'done' :  done }
         self.response.write(json.dumps(ret))
+
+class PeriodicTasks(webapp2.RequestHandler):
+
+    def get(self):
+        pass
 
 class ReportAll(webapp2.RequestHandler):
 
@@ -714,7 +1059,7 @@ class Report(webapp2.RequestHandler):
                     'supports': supports,
                     'changes' : changes }
             ret = json.dumps(ret)
-            memcache.add(key, ret.encode("zip"), 7200)
+            memcache.add(key, ret.encode("zip"), 86400)
 
         self.response.headers['Content-Type'] = 'application/json'
         if callback is not None and callback != "":
@@ -722,11 +1067,14 @@ class Report(webapp2.RequestHandler):
         self.response.write(ret)
 
 api = webapp2.WSGIApplication([
+    ('/api/budget/([0-9]+)/approvals', BudgetApprovalsApi),
+
     ('/api/budget/([0-9]+)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(equivs)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(kids)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(parents)', BudgetApi),
+    ('/api/budget/([0-9]+)/([0-9]+)/(depth)/([0-9]+)', BudgetApi),
     ('/api/changes/([0-9]+)', ChangesApi),
     ('/api/changes/pending/(all)', ChangesPendingApi),
     ('/api/changes/pending/(committee)', ChangesPendingApi),
@@ -736,11 +1084,27 @@ api = webapp2.WSGIApplication([
     ('/api/changegroup/([0-9]+)', ChangeGroupApi),
     ('/api/changegroup/pending', ChangeGroupsPendingApi),
     ('/api/changegroup/([0-9]+)/([0-9]+)', ChangeGroupApi),
+    ('/api/changegroup/([0-9]+)/([0-9]+)/(equivs)', ChangeGroupApi),
     ('/api/changegroup/([0-9][0-9]-[0-9][0-9][0-9])/([0-9]+)', ChangeGroupApi),
 
     ('/api/change_expl/([0-9][0-9])-([0-9][0-9][0-9])/([0-9]+)', ChangeExplApi),
-    ('/api/supports/([0-9]+)', SupportsApi),
+    ('/api/supports/(kind)/([a-z]+) ', SupportsApi),
+    ('/api/supports/(kind)/([a-z]+)/([0-9]+)', SupportsApi),
+    ('/api/supports/(kind)/([a-z]+)/([0-9]+)/([0-9]+)', SupportsApi),
+    ('/api/supports/(kind)/([a-z]+)/([0-9]+)/(aggregated)', SupportsApi),
+    ('/api/supports/(kind)/([a-z]+)/([0-9]+)/([0-9]+)/(aggregated)', SupportsApi),
+    ('/api/supports/(recipient)/([^/]+)/([0-9]+)', SupportsApi),
     ('/api/supports/(recipient)/(.+)', SupportsApi),
+    ('/api/supports/([0-9]+)', SupportsApi),
+    ('/api/supports/([0-9]+)/([0-9]+)', SupportsApi),
+
+    ('/api/exemption/([0-9]+)', ExemptionsApi),
+
+    ('/api/thumbnail/(.+)', ThumbnailApi),
+    ('/api/participants/([0-9]+)', ParticipantApi),
+    ('/api/participants/([0-9]+)/([0-9]+)/([0-9]+)/([0-9]+)', ParticipantApi),
+    ('/api/training/(.+)', TrainingFlowApi),
+    ('/api/entity/(.+)', EntityApi),
     ('/api/(company)_record/([0-9]+)', CompanyNGOApi),
     ('/api/(ngo)_record/([0-9]+)', CompanyNGOApi),
     ('/api/search/([a-z]+)', SearchApi),
@@ -750,3 +1114,11 @@ api = webapp2.WSGIApplication([
     ('/api/update/([a-z]+)', Update),
     ('/rss/changes/pending', PendingChangesRss)
 ], debug=True)
+
+tasks = webapp2.WSGIApplication([
+    ('/tasks/periodic', PeriodicTasks),
+], debug=True)
+
+redirect = webapp2.WSGIApplication([
+    webapp2.Route('/', webapp2.RedirectHandler, defaults={'_uri':'/stg/'}),
+])

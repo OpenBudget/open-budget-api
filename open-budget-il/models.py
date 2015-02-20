@@ -33,9 +33,16 @@ class BudgetLine(ndb.Model):
     net_used = ndb.IntegerProperty()
     gross_used = ndb.IntegerProperty()
 
+    group_top = ndb.StringProperty(repeated=True)
+    group_full = ndb.StringProperty(repeated=True)
+
     prefixes = ndb.StringProperty(repeated=True)
     equiv_code = ndb.StringProperty(repeated=True)
     depth = ndb.IntegerProperty()
+
+    explanation = ndb.TextProperty(indexed=False)
+
+    analysis_short_term_yearly_change = ndb.IntegerProperty()
 
 class SupportLine(ndb.Model):
     """Single support line"""
@@ -51,8 +58,8 @@ class SupportLine(ndb.Model):
 
     recipient = ndb.StringProperty()
 
-    company_id = ndb.StringProperty()
-    ngo_id = ndb.StringProperty()
+    entity_id = ndb.StringProperty()
+    entity_kind = ndb.StringProperty()
 
     prefixes = ndb.StringProperty(repeated=True)
 
@@ -106,6 +113,7 @@ class ChangeGroup(ndb.Model):
     changes = ndb.JsonProperty()
     date = ndb.DateProperty()
     pending = ndb.BooleanProperty()
+    equiv_code = ndb.StringProperty(repeated=True)
 
 class SearchHelper(ndb.Model):
     """Text Search index"""
@@ -126,6 +134,13 @@ class PreCommitteePage(ndb.Model):
     date = ndb.DateProperty()
     last = ndb.BooleanProperty()
     kind = ndb.IntegerProperty() # 1 for request explanation, 2 for table
+
+class Entity(ndb.Model):
+    """A single amuta record"""
+    id = ndb.StringProperty()
+    kind = ndb.StringProperty()
+    name = ndb.StringProperty()
+    creation_date = ndb.DateTimeProperty()
 
 class CompanyRecord(ndb.Model):
     """A single company record"""
@@ -159,3 +174,97 @@ class NGORecord(ndb.Model):
     founding_year = ndb.IntegerProperty()
     essence = ndb.StringProperty()
     objective = ndb.StringProperty()
+
+class ModelDocumentation(ndb.Model):
+    """Documentation for a model"""
+    model = ndb.StringProperty()
+    field = ndb.StringProperty()
+    he = ndb.StringProperty()
+    en = ndb.StringProperty()
+    order = ndb.IntegerProperty()
+
+## Timeline models
+class ParticipantMapping(ndb.Model):
+    """Budget code to participant kind"""
+    budget_code	= ndb.StringProperty()
+    participants = ndb.StringProperty(repeated=True)
+
+class ParticipantTimeline(ndb.Model):
+    """Participant event timeline"""
+    kind = ndb.StringProperty()
+    start_date	= ndb.DateProperty()
+    end_date = ndb.DateProperty()
+    name = ndb.StringProperty()
+    title = ndb.StringProperty()
+    full_title = ndb.StringProperty()
+    party = ndb.StringProperty()
+
+class ParticipantPhoto(ndb.Model):
+    """Participant photo"""
+    name = ndb.StringProperty()
+    photo_url = ndb.StringProperty(indexed=False)
+
+class BudgetApproval(ndb.Model):
+    """Budget lifetime info"""
+    year = ndb.IntegerProperty()
+    approval_date = ndb.DateProperty()
+    effect_date = ndb.DateProperty()
+    end_date = ndb.DateProperty()
+    link = ndb.StringProperty()
+
+class TrainingFlow(ndb.Model):
+    flow = ndb.StringProperty()
+    index = ndb.IntegerProperty()
+    title = ndb.StringProperty()
+    content	= ndb.StringProperty(indexed=False)
+    path = ndb.StringProperty()
+    element	= ndb.StringProperty()
+    placement = ndb.StringProperty()
+    duration = ndb.IntegerProperty()
+    backdrop = ndb.BooleanProperty()
+    orphan = ndb.BooleanProperty()
+    description	= ndb.StringProperty(indexed=False)
+
+class MRExemptionRecordHistory(ndb.Model):
+    date = ndb.DateProperty()
+    field = ndb.StringProperty()
+    from_value = ndb.JsonProperty()
+    to_value = ndb.JsonProperty()
+
+class MRExemptionRecordDocument(ndb.Model):
+    update_time = ndb.DateTimeProperty()
+    description = ndb.StringProperty(indexed=False)
+    link = ndb.StringProperty()
+
+class MRExemptionRecord(ndb.Model):
+    subjects = ndb.StringProperty(repeated=True)
+    documents = ndb.StructuredProperty(MRExemptionRecordDocument, repeated=True)
+
+    publication_id = ndb.IntegerProperty()
+
+    start_date = ndb.DateProperty()
+    end_date = ndb.DateProperty()
+    claim_date = ndb.DateProperty()
+    last_update_date = ndb.DateProperty()
+
+    contact = ndb.StringProperty()
+    contact_email = ndb.StringProperty()
+
+    regulation = ndb.StringProperty()
+    supplier = ndb.StringProperty()
+    supplier_id = ndb.StringProperty()
+
+    url = ndb.StringProperty()
+    publisher = ndb.StringProperty()
+
+    history = ndb.StructuredProperty(MRExemptionRecordHistory, repeated=True)
+
+    volume = ndb.IntegerProperty()
+    reason = ndb.StringProperty()
+    decision = ndb.StringProperty()
+    description = ndb.StringProperty(indexed=False)
+
+    entity_id = ndb.StringProperty()
+    entity_kind = ndb.StringProperty()
+
+    last_modified = ndb.DateTimeProperty(auto_now=True)

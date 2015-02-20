@@ -7,6 +7,9 @@ threadsafe: true
 handlers:
 - url: /api/.*
   script: main.api
+- url: /api
+  static_files: docs/api.html
+  upload: docs/
 - url: /rss/.*
   script: main.api
 - url: /report/api/.*
@@ -26,12 +29,13 @@ handlers:
 - url: /report/go/(.+)
   static_files: webapp/dist/\1
   upload: webapp/dist/
-- url: /stg/
-  static_files: webapp/main/index.html
-  upload: webapp/main/
-- url: /stg/(.+)
-  static_files: webapp/main/\1
-  upload: webapp/main/
+
+- url: /tasks/.*
+  script: main.tasks
+
+- url: /redirect/.*
+  static_files: redirector/redirector.html
+  upload: redirector
 
 - url: /change_input/dist
   static_dir: change_input/dist
@@ -47,11 +51,17 @@ handlers:
   static_files: gov/\1
   upload: gov/
 
+- url: /
+  static_files: webapp/main/index.html
+  upload: webapp/main/
+- url: /(.+)
+  static_files: webapp/main/\1
+  upload: webapp/main/
 
 builtins:
 - remote_api: on
-- appstats: on
 - deferred: on
+#- appstats: on
 
 libraries:
 - name: webapp2
