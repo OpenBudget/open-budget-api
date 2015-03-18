@@ -63,9 +63,13 @@ class Update(webapp2.RequestHandler):
         if (user is None or user.email() not in ALLOWED_EMAILS) and key != UPLOAD_KEY:
             self.abort(403)
 
-        #body = urllib.unquote_plus(self.request.body)
-        body = self.request.body
-        body = body.strip()
+        # check if we are in a production or localhost environment
+        if ("localhost" in self.request.host):
+            # on a localhost the body needs to be unquoted
+            body = urllib.unquote_plus(self.request.body)
+        else:
+            body = self.request.body
+        body = body.strip("=")
         to_update = body.split('\n')
         try:
             to_update = [ json.loads(x) for x in to_update if x.strip() != '' ]
@@ -108,7 +112,13 @@ class Update(webapp2.RequestHandler):
                 for f in ['start_date','end_date','claim_date','last_update_date']:
                     d = item.get(f)
                     if d is not None and d != '' and d != '-':
-                        item[f] = datetime.datetime.strptime(d,'%d/%m/%Y').date()
+                        if "-" in d:
+                            # TODO: Adam, is the month/day order correct?
+                            dateFormat = '%Y-%m-%d'
+                        else:
+                            # default format
+                            dateFormat = '%d/%m/%Y'
+                        item[f] = datetime.datetime.strptime(d,dateFormat).date()
                     else:
                         item[f] = None
 
@@ -376,7 +386,8 @@ class Update(webapp2.RequestHandler):
             if dbitem is not None:
                 dirty = False
                 for k,v in item.iteritems():
-                    dirty = mysetattr(dbitem,k,v) or dirty
+                    if v is not None:
+                        dirty = mysetattr(dbitem,k,v) or dirty
                 if dirty:
                     to_put.append(dbitem)
 
