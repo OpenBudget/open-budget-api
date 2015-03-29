@@ -679,9 +679,12 @@ class ExemptionsApi(GenericApi):
 
     def get_query(self,*args,**kw):
         publication_id = args[0]
-        publication_id = int(publication_id)
-        lines = MRExemptionRecord.query(MRExemptionRecord.publication_id==publication_id)
-        self.single = True
+        if publication_id == '':
+            lines = MRExemptionRecord.query()
+        else:
+            publication_id = int(publication_id)
+            lines = MRExemptionRecord.query(MRExemptionRecord.publication_id==publication_id)
+            self.single = True
         return lines
 
 class SupportsApi(GenericApi):
@@ -813,6 +816,15 @@ class TrainingFlowApi(GenericApi):
 
     def get_query(self,flow):
         return TrainingFlow.query(TrainingFlow.flow==flow).order(TrainingFlow.index)
+
+class DescribeApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "DescribeApi:%s" % "/".join(args)
+
+    def get_query(self,model):
+        return ModelDocumentation.query(ModelDocumentation.model==model).order(ModelDocumentation.order)
+
 
 class ThumbnailApi(webapp2.RequestHandler):
 
@@ -1105,6 +1117,9 @@ api = webapp2.WSGIApplication([
     ('/api/participants/([0-9]+)/([0-9]+)/([0-9]+)/([0-9]+)', ParticipantApi),
     ('/api/training/(.+)', TrainingFlowApi),
     ('/api/entity/(.+)', EntityApi),
+
+    ('/api/describe/(.+)', DescribeApi),
+
     ('/api/(company)_record/([0-9]+)', CompanyNGOApi),
     ('/api/(ngo)_record/([0-9]+)', CompanyNGOApi),
     ('/api/search/([a-z]+)', SearchApi),
