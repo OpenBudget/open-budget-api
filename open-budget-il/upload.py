@@ -1,6 +1,8 @@
 import logging
 import datetime
 
+from google.appengine.api import search
+
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
 from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation
 from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, BudgetApproval, TrainingFlow
@@ -14,27 +16,39 @@ def add_prefixes(item,code_field):
         item["prefixes"] = prefixes
 
 class UploadKind(object):
+    FTS_FIELDS = []
 
     @staticmethod
     def mysetattr(response,i,k,v):
-        orig_v = i.__getattribute__(k)
-        if type(orig_v) == list and type(v) == list:
-            try:
-                orig_v.sort()
-                logging.debug("About to sort %s:%r" % (k,v))
-                v.sort()
-                if len(v) != len(orig_v) or any(x!=y for x,y in zip(v,orig_v)):
+        # verify that the key exists in the model
+        # there can be discreptancies 
+        if hasattr(i, k):
+            orig_v = i.__getattribute__(k)
+            if type(orig_v) == list and type(v) == list:
+                try:
+                    orig_v.sort()
+                    logging.debug("About to sort %s:%r" % (k,v))
+                    v.sort()
+                    if len(v) != len(orig_v) or any(x!=y for x,y in zip(v,orig_v)):
+                        i.__setattr__(k,v)
+                        response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
+                except ValueError:
+                    i.__setattr__(k,v)
+                    response.write("%s: %s: list != new list\n" % (i.key,k))
+                return True
+            else:
+                if orig_v != v:
+                    # TODO: not sure this is the proper handling of a new 'none'
+                    if v == None:
+                        if (type(orig_v) is list):
+                            v = []
+                        if (type(orig_v) is str):
+                            v = ""
+                        if (type(orig_v) is int):
+                            v = 0
                     i.__setattr__(k,v)
                     response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
-            except ValueError:
-                i.__setattr__(k,v)
-                response.write("%s: %s: list != new list\n" % (i.key,k))
-            return True
-        else:
-            if orig_v != v:
-                i.__setattr__(k,v)
-                response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
-                return True
+                    return True
         return False
 
     def preprocess_item(self,item):
@@ -61,6 +75,24 @@ class UploadKind(object):
             dbitem = dbitem[0]
         dbitems = [dbitem]
 
+        doc = None
+        if len(self.FTS_FIELDS) > 0:
+            # Build a unique document ID
+            key_values = map(lambda x: str(getattr(dbitem, x)), self.KEY_FIELDS)
+            doc_id = "%s-%s"%(self.KIND, "-".join(key_values))
+            fieldList = []
+            # Iterate over the FTS_FIELDS and build the field descriptor list
+            for fieldDescriptor in self.FTS_FIELDS:
+                field = getattr(search, fieldDescriptor['type'])(
+                    name=fieldDescriptor['name'],
+                    value=getattr(dbitem, fieldDescriptor['name']))
+
+                fieldList.append(field)
+            # Create a new document
+            doc = search.Document(
+                doc_id = doc_id,
+                fields = fieldList)
+
         dirty = False
         dirty_fields = set()
         for k,v in item.iteritems():
@@ -70,7 +102,7 @@ class UploadKind(object):
                 dirty_fields.add(k)
         if not dirty:
             dbitems = []
-        return dbitems, to_delete
+        return dbitems, to_delete, doc
 
 class ULSystemProperty(UploadKind):
     KIND = "sp"
@@ -127,8 +159,10 @@ class ULBudgetLine(UploadKind):
     KIND = "bl"
     CLS = BudgetLine
     KEY_FIELDS = [ 'year', 'code' ]
+    FTS_FIELDS = [ {"name":"title", "type":"TextField"} ]
 
     def preprocess_item(self,item):
+        code = item['code']
         add_prefixes(item, 'code')
         item["depth"] = len(code)/2 - 1
         return item
@@ -204,7 +238,7 @@ class ULNGORecord(UploadKind):
     CLS = NGORecord
     KEY_FIELDS = [ 'amuta_id' ]
 
-class ULEntity(UploadKind):
+class ULMRExemptionRecord(UploadKind):
     KIND = "mr"
     CLS = MRExemptionRecord
     KEY_FIELDS = [ 'publication_id' ]
@@ -241,7 +275,7 @@ class ULEntity(UploadKind):
         for f in ['start_date','end_date','claim_date','last_update_date']:
             d = item.get(f)
             if d is not None and d != '' and d != '-':
-                item[f] = datetime.datetime.strptime(d,'%d/%m/%Y').date()
+                item[f] = datetime.datetime.strptime(d,'%Y-%m-%d').date()
             else:
                 item[f] = None
 
@@ -264,6 +298,8 @@ upload_handlers = [
     ULEntity,
     ULCompanyRecord,
     ULNGORecord,
+    ULMRExemptionRecord,
+    ULSupportLine
 ]
 
 upload_handlers = { x.KIND: x() for x in upload_handlers }

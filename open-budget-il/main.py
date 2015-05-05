@@ -16,6 +16,7 @@ from google.appengine.api import memcache
 from google.appengine.ext import ndb
 from google.appengine.ext import blobstore
 from google.appengine.api import users
+from google.appengine.api import search
 
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
 from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation
@@ -79,16 +80,32 @@ class Update(webapp2.RequestHandler):
             raise
         to_put = []
         to_delete = []
+        doc_list = []
         handler = upload_handlers[what]
         for item in to_update:
-            items, todel = handler.handle(self.response,item)
+            items, todel, doc = handler.handle(self.response,item)
             to_delete.extend(todel)
             to_put.extend(items)
+            if doc != None:
+                doc_list.append(doc)
 
         if len(to_put) > 0:
             ndb.put_multi(to_put)
         if len(to_delete) > 0:
             ndb.delete_multi([x.key for x in to_delete])
+        if len(doc_list) > 0:
+            try:
+                # TODO: should we have a different index per item kind?
+                index = search.Index(name="OpenBudget")
+                i = 0
+                # Put upto 200 documents at a time for efficiency
+                while i < len(doc_list):
+                    topIndex = min(i+200, len(doc_list))
+                    index.put( doc_list[i:topIndex] )
+                    i += 200
+            except search.Error:
+                logging.exception('Put failed')
+
         self.response.write("OK %d/%d-%d\n" % (len(to_put),len(to_update),len(to_delete)))
 
 class CustomJSONEncoder(json.JSONEncoder):
