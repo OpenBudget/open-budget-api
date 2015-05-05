@@ -22,6 +22,7 @@ from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord
 from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, BudgetApproval, TrainingFlow
 from models import MRExemptionRecord, MRExemptionRecordDocument, MRExemptionRecordHistory
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
+from upload import upload_handlers
 
 INFLATION = {1992: 2.338071159424868,
  1993: 2.1016785142253185,
@@ -78,318 +79,11 @@ class Update(webapp2.RequestHandler):
             raise
         to_put = []
         to_delete = []
+        handler = upload_handlers[what]
         for item in to_update:
-            dbitem = None
-            if what == "mr":
-                if item.get('supplier_id') is not None:
-                    item['supplier_id'] = str(item['supplier_id'])
-                docs = []
-                for doc in item.get('documents',[]):
-                    if doc['update_time'] != '-':
-                        doc['update_time'] = datetime.datetime.strptime("%(time)s %(date)s" % doc['update_time'],'%H:%M %d/%m/%Y')
-                    else:
-                        doc['update_time'] = None
-                    docs.append( MRExemptionRecordDocument(**doc) )
-                item['documents'] = docs
-                history_items = []
-                for history_item in item.get('history',[]):
-                    if history_item['date'] != '-':
-                        history_item['date'] = datetime.datetime.strptime(history_item['date'],'%d/%m/%Y').date()
-                    else:
-                        history_item['date'] = None
-                    history_item['from_value'] = history_item.get('from')
-                    if history_item['from_value'] is not None:
-                        del history_item['from']
-                    history_item['to_value'] = history_item.get('to')
-                    if history_item['to_value'] is not None:
-                        del history_item['to']
-                    if type(history_item['to_value']) is list or type(history_item['from_value']) is list:
-                        continue
-                    logging.debug("adding history item %r" % history_item )
-                    history_items.append( MRExemptionRecordHistory(**history_item) )
-                item['history'] = history_items
-
-                for f in ['start_date','end_date','claim_date','last_update_date']:
-                    d = item.get(f)
-                    if d is not None and d != '' and d != '-':
-                        if "-" in d:
-                            # TODO: Adam, is the month/day order correct?
-                            dateFormat = '%Y-%m-%d'
-                        else:
-                            # default format
-                            dateFormat = '%d/%m/%Y'
-                        item[f] = datetime.datetime.strptime(d,dateFormat).date()
-                    else:
-                        item[f] = None
-
-                dbitem = MRExemptionRecord.query(MRExemptionRecord.publication_id==item['publication_id']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No exemption record for publication_id=%(publication_id)s" % item)
-                    dbitem = MRExemptionRecord()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "sp":
-                dbitem = SystemProperty.query(SystemProperty.key==item['key']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No system property for key=%(key)s" % item)
-                    dbitem = SystemProperty()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "md":
-                dbitem = ModelDocumentation.query(ModelDocumentation.model==item['model'],
-                                                  ModelDocumentation.field==item['field']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No ModelDocumentation for model=%(model)s field=%(field)s" % item)
-                    dbitem = ModelDocumentation()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "pp":
-                dbitem = ParticipantPhoto.query(ParticipantPhoto.name==item['name']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No ParticipantPhoto for name=%(name)s" % item)
-                    dbitem = ParticipantPhoto()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "tf":
-                dbitem = TrainingFlow.query(TrainingFlow.flow==item['flow'],TrainingFlow.index==item['index']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No TrainingFlow for flow=%(flow)s, index=%(index)s" % item)
-                    dbitem = TrainingFlow()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "ba":
-                if item.get('approval_date') is not None:
-                    item['approval_date'] = datetime.datetime.fromtimestamp(item['approval_date']).date()
-                if item.get('effect_date') is not None:
-                    item['effect_date'] = datetime.datetime.fromtimestamp(item['effect_date']).date()
-                if item.get('end_date') is not None:
-                    item['end_date'] = datetime.datetime.fromtimestamp(item['end_date']).date()
-                dbitem = BudgetApproval.query(BudgetApproval.year==item['year']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No BudgetApproval for year=%(year)s" % item)
-                    dbitem = BudgetApproval()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "pt":
-                if item.get('start_date') is not None:
-                    item['start_date'] = datetime.datetime.fromtimestamp(item['start_date']).date()
-                if item.get('end_date') is not None:
-                    item['end_date'] = datetime.datetime.fromtimestamp(item['end_date']).date()
-                dbitem = ParticipantTimeline.query(ParticipantTimeline.kind==item['kind'],
-                                                   ParticipantTimeline.name==item['full_title'],
-                                                   ParticipantTimeline.start_date==item['start_date']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No ParticipantTimeline for kind=%(kind)s full_title=%(full_title)s start_date=%(start_date)s" % item)
-                    dbitem = ParticipantTimeline()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "pm":
-                dbitem = ParticipantMapping.query(ParticipantMapping.budget_code==item['budget_code']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No ParticipantMapping for budget_code=%(budget_code)s" % item)
-                    dbitem = ParticipantMapping()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "bl":
-                dbitem = BudgetLine.query(BudgetLine.year==item['year'],BudgetLine.code==item['code']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No budget item for year=%d, code=%s" % (item['year'],item['code']))
-                    dbitem = BudgetLine()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-                code = item['code']
-                prefixes = [ code[:l] for l in range(2,len(code),2) ]
-                prefixes.append(code)
-                #self.response.write("%s==>%s\n" % (code,prefixes))
-                item["prefixes"] = prefixes
-                item["depth"] = len(code)/2 - 1
-
-            if what == "cl":
-                if item['year'] is None or item['leading_item'] is None or item['req_code'] is None or item['budget_code'] is None:
-                    self.abort(400)
-                dbitem = ChangeLine.query(ChangeLine.year==item['year'],
-                                          ChangeLine.leading_item==item['leading_item'],
-                                          ChangeLine.req_code==item['req_code'],
-                                          ChangeLine.budget_code==item['budget_code']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No change item for year=%(year)d, leading_item=%(leading_item)d, req_code=%(req_code)d, code=%(budget_code)s" % item)
-                    dbitem = ChangeLine()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-                code = item['budget_code']
-                prefixes = [ code[:l] for l in range(2,len(code),2) ]
-                prefixes.append(code)
-                #self.response.write(code+"==>"+repr(prefixes)+"\n")
-                item["prefixes"] = prefixes
-                if item.get('date') is not None and item['date'] != "":
-                    try:
-                        item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
-                    except:
-                        item['date'] = datetime.datetime.fromtimestamp(item['date']/1000.0+86400)
-                    item['date'] = item['date'].date()
-
-            if what == "cg":
-                if item['year'] is None or item['group_id'] is None:
-                    self.abort(400)
-                dbitem = ChangeGroup.query(ChangeGroup.year==item['year'],
-                                           ChangeGroup.group_id==item['group_id']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No change group for year=%(year)d, group_id=%(group_id)s" % item)
-                    dbitem = ChangeGroup()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-                if item.get('date') is not None and item['date'] != "":
-                    item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
-                    item['date'] = item['date'].date()
-
-            if what == "ex":
-                if item['year'] is None or item['leading_item'] is None or item['req_code'] is None:
-                    self.abort(400)
-                dbitem = ChangeExplanation.query(ChangeLine.year==item['year'],
-                                                 ChangeLine.leading_item==item['leading_item'],
-                                                 ChangeLine.req_code==item['req_code']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No change explanation for year=%(year)d, leading_item=%(leading_item)d, req_code=%(req_code)d" % item)
-                    dbitem = ChangeExplanation()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "sl":
-                if item["year"] is None or item["code"] is None or item["recipient"] is None or item["kind"] is None or item["title"] is None:
-                    self.abort(400)
-                dbitem = SupportLine.query(SupportLine.year==item["year"],
-                                           SupportLine.code==item["code"],
-                                           SupportLine.recipient==item["recipient"],
-                                           SupportLine.kind==item["kind"]).fetch(100)
-                if len(dbitem) == 0:
-                    self.response.write("No support item for year=%(year)s, code=%(code)s, recipient=%(recipient)s, kind=%(kind)s" % item)
-                    dbitem = SupportLine()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-                code = item['code']
-                prefixes = [ code[:l] for l in range(2,len(code),2) ]
-                prefixes.append(code)
-                item["prefixes"] = prefixes
-
-            if what == "sh":
-                dbitem = SearchHelper.query(SearchHelper.kind==item['kind'],SearchHelper.value==item['value'],SearchHelper.year==max(item['year'])).fetch(1000,batch_size=1000)
-                if len(dbitem) == 0:
-                    self.response.write("No searchhelper for kind=%(kind)s, value=%(value)s, year=%(year)r\n" % item)
-                    dbitem = SearchHelper()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-                item["prefix"] = None
-
-            if what == "pcp":
-                dbitem = PreCommitteePage.query(PreCommitteePage.pdf==blobstore.BlobKey(item['pdf']), PreCommitteePage.page==blobstore.BlobKey(item['page'])).fetch(100)
-                if len(dbitem) == 0:
-                    self.response.write("No PreCommitteePage for pdf=%(pdf)s, page=%(page)s\n" % item)
-                    dbitem = PreCommitteePage()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-                del item["pdf"]
-                del item["page"]
-
-            if what == "cr":
-                dbitem = CompanyRecord.query(CompanyRecord.registration_id==item['registration_id']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No company record for registration_id=%(registration_id)s" % item)
-                    dbitem = CompanyRecord()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "ngo":
-                dbitem = NGORecord.query(NGORecord.amuta_id==item['amuta_id']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No NGO record for amuta_id=%(amuta_id)s" % item)
-                    dbitem = NGORecord()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            if what == "en":
-                try:
-                    item['creation_date'] = datetime.datetime.fromtimestamp(item['creation_date'])
-                except:
-                    item['creation_date'] = None
-                dbitem = Entity.query(Entity.id==item['id'],Entity.kind==item['kind']).fetch(1)
-                if len(dbitem) == 0:
-                    self.response.write("No Entity record for id=%(id)s kind=%(kind)s" % item)
-                    dbitem = Entity()
-                else:
-                    for x in dbitem[1:]:
-                        to_delete.append(x)
-                    dbitem = dbitem[0]
-
-            def mysetattr(i,k,v):
-                orig_v = i.__getattribute__(k)
-                if type(orig_v) == list and type(v) == list:
-                    try:
-                        orig_v.sort()
-                        logging.debug("About to sort %s:%r" % (k,v))
-                        v.sort()
-                        if len(v) != len(orig_v) or any(x!=y for x,y in zip(v,orig_v)):
-                            i.__setattr__(k,v)
-                            self.response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
-                    except ValueError:
-                        i.__setattr__(k,v)
-                        self.response.write("%s: %s: list != new list\n" % (i.key,k))
-                    return True
-                else:
-                    if orig_v != v:
-                        i.__setattr__(k,v)
-                        self.response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
-                        return True
-                return False
-
-            if dbitem is not None:
-                dirty = False
-                for k,v in item.iteritems():
-                    if v is not None:
-                        dirty = mysetattr(dbitem,k,v) or dirty
-                if dirty:
-                    to_put.append(dbitem)
+            items, todel = handler.handle(self.response,item)
+            to_delete.extend(todel)
+            to_put.extend(items)
 
         if len(to_put) > 0:
             ndb.put_multi(to_put)
@@ -421,6 +115,14 @@ def CSVEncode(data,fields):
         writer.writerow([unicode(row[f['field']]).encode('utf8') for f in fields])
     return output.getvalue()
 
+def XLSEncode(data,fields):
+    output = StringIO.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([f['he'].encode('cp1255','ignore') for f in fields])
+    for row in data:
+        writer.writerow([unicode(row[f['field']]).encode('cp1255','ignore') for f in fields])
+    return output.getvalue()
+
 def get_participants(budget_code,year=None,month=None,day=None):
     code = budget_code[2:4]
     ret = []
@@ -434,9 +136,9 @@ def get_participants(budget_code,year=None,month=None,day=None):
     date = None
     if year is not None and month is not None and day is not None:
         date = datetime.date(year=int(year),month=int(month),day=int(day))
-        participants = ParticipantTimeline.query(ParticipantTimeline.kind.IN(participant_mapping),ParticipantTimeline.start_date<=date).order(-ParticipantTimeline.start_date).fetch(50)
+        participants = ParticipantTimeline.query(ParticipantTimeline.kind.IN(participant_mapping),ParticipantTimeline.start_date<=date).order(-ParticipantTimeline.start_date).fetch(250)
     else:
-        participants = ParticipantTimeline.query(ParticipantTimeline.kind.IN(participant_mapping)).order(ParticipantTimeline.start_date).fetch(100)
+        participants = ParticipantTimeline.query(ParticipantTimeline.kind.IN(participant_mapping)).order(ParticipantTimeline.start_date).fetch(250)
     for kind in participant_mapping:
         kind_ret = []
         for participant in participants:
@@ -488,7 +190,7 @@ class GenericApi(webapp2.RequestHandler):
         else:
             self.limit = 100
         self.output_format = self.request.get('o')
-        if self.output_format not in ['html','json','csv']:
+        if self.output_format not in ['html','json','csv','xls']:
             self.output_format = 'json'
 
         data = None
@@ -517,6 +219,8 @@ class GenericApi(webapp2.RequestHandler):
                 ret = HTMLEncode(ret, self.getDocumentation(query.kind))
             elif self.output_format == 'csv':
                 ret = CSVEncode(ret, self.getDocumentation(query.kind))
+            elif self.output_format == 'xls':
+                ret = XLSEncode(ret, self.getDocumentation(query.kind))
             if key is not None:
                 memcache.add(key, ret.encode("zip"), 86400)
 
@@ -529,6 +233,10 @@ class GenericApi(webapp2.RequestHandler):
             self.response.headers['Content-Type'] = 'text/html'
         elif self.output_format == 'csv':
             self.response.headers['Content-Type'] = 'text/csv'
+            self.response.headers['Content-Disposition'] = 'attachment; filename=export.csv'
+        elif self.output_format == 'xls':
+            self.response.headers['Content-Type'] = 'application/vnd.ms-excel'
+            self.response.headers['Content-Disposition'] = 'attachment; filename=export.csv'
 
         self.response.headers['cache-control'] = 'public, max-age=600'
         self.response.write(ret)
@@ -689,10 +397,23 @@ class ExemptionsApi(GenericApi):
         return "ExemptionsApi:%s" % "/".join(args)
 
     def get_query(self,*args,**kw):
-        publication_id = args[0]
-        publication_id = int(publication_id)
-        lines = MRExemptionRecord.query(MRExemptionRecord.publication_id==publication_id)
-        self.single = True
+        kind = args[0]
+        lines = None
+        if kind=='publication':
+            publication_id = args[1]
+            publication_id = int(publication_id)
+            lines = MRExemptionRecord.query(MRExemptionRecord.publication_id==publication_id)
+            self.single = True
+        elif kind=='budget':
+            budget_code = args[1]
+            lines = MRExemptionRecord.query(MRExemptionRecord.prefixes==budget_code)
+        elif kind=='updated':
+            date_from = datetime.date(int(args[1]),int(args[2]),int(args[3]))
+            date_to = datetime.date(int(args[4]),int(args[5]),int(args[6]))
+            lines = MRExemptionRecord.query(MRExemptionRecord.last_update_date >= date_from, MRExemptionRecord.last_update_date <= date_to)
+        elif kind=='new':
+            lines = MRExemptionRecord.query().order(-MRExemptionRecord.last_update_date)
+
         return lines
 
 class SupportsApi(GenericApi):
@@ -779,15 +500,23 @@ class SystemPropertyApi(GenericApi):
         self.single = True
         return lines
 
+
+ALL_DIGITS = re.compile(r'^\d+$')
 class EntityApi(GenericApi):
 
     def key(self,id):
         return "Entity:%s" % id
 
     def get_query(self,id):
-        lines = Entity.query(Entity.id==id).fetch(1)
+        lines = []
+        if ALL_DIGITS.match(id) is not None:
+            lines = Entity.query(Entity.id==id).fetch(1)
+        else:
+            lines = Entity.query(Entity.name==id).fetch(1)
         if len(lines)>0:
             ret = lines[0].to_dict()
+            id = ret['id']
+            logging.debug('entity-api: id='+id)
             supports = SupportLine.query(SupportLine.entity_id==id).order(-SupportLine.year).fetch(1000)
             ret['supports'] = [x.to_dict() for x in supports]
             exemptions = MRExemptionRecord.query(MRExemptionRecord.entity_id==id).order(-MRExemptionRecord.start_date).fetch(1000)
@@ -824,6 +553,15 @@ class TrainingFlowApi(GenericApi):
 
     def get_query(self,flow):
         return TrainingFlow.query(TrainingFlow.flow==flow).order(TrainingFlow.index)
+
+class DescribeApi(GenericApi):
+
+    def key(self,*args,**kw):
+        return "DescribeApi:%s" % "/".join(args)
+
+    def get_query(self,model):
+        return ModelDocumentation.query(ModelDocumentation.model==model).order(ModelDocumentation.order)
+
 
 class ThumbnailApi(webapp2.RequestHandler):
 
@@ -1109,13 +847,19 @@ api = webapp2.WSGIApplication([
     ('/api/supports/([0-9]+)', SupportsApi),
     ('/api/supports/([0-9]+)/([0-9]+)', SupportsApi),
 
-    ('/api/exemption/([0-9]+)', ExemptionsApi),
+    ('/api/exemption/(publication)/([0-9]+)', ExemptionsApi),
+    ('/api/exemption/(budget)/([0-9]+)', ExemptionsApi),
+    ('/api/exemption/(new)', ExemptionsApi),
+    ('/api/exemption/(updated)/([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])/([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])', ExemptionsApi),
 
     ('/api/thumbnail/(.+)', ThumbnailApi),
     ('/api/participants/([0-9]+)', ParticipantApi),
     ('/api/participants/([0-9]+)/([0-9]+)/([0-9]+)/([0-9]+)', ParticipantApi),
     ('/api/training/(.+)', TrainingFlowApi),
     ('/api/entity/(.+)', EntityApi),
+
+    ('/api/describe/(.+)', DescribeApi),
+
     ('/api/(company)_record/([0-9]+)', CompanyNGOApi),
     ('/api/(ngo)_record/([0-9]+)', CompanyNGOApi),
     ('/api/search/([a-z]+)', SearchApi),

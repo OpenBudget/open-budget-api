@@ -242,6 +242,9 @@ class MRExemptionRecord(ndb.Model):
 
     publication_id = ndb.IntegerProperty()
 
+    budget_code = ndb.StringProperty()
+    prefixes = ndb.StringProperty(repeated=True)
+
     start_date = ndb.DateProperty()
     end_date = ndb.DateProperty()
     claim_date = ndb.DateProperty()
@@ -259,7 +262,7 @@ class MRExemptionRecord(ndb.Model):
 
     history = ndb.StructuredProperty(MRExemptionRecordHistory, repeated=True)
 
-    volume = ndb.IntegerProperty()
+    volume = ndb.FloatProperty()
     reason = ndb.StringProperty()
     decision = ndb.StringProperty()
     description = ndb.StringProperty(indexed=False)
