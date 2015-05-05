@@ -1,3 +1,4 @@
+#! /usr/bin/python
 import json
 import urllib2
 import sys
@@ -6,6 +7,7 @@ import time
 import hashlib
 import hmac
 import requests
+
 
 def sign(key, path, expires):
     if not key:
@@ -40,18 +42,21 @@ if __name__=="__main__":
         'bl': {'queryId' : 65, "secret_api_key": "e05145295f37859eac36b35aa38d372ea4d0f23b"},
         'cl': {'queryId' : 66, "secret_api_key": "972b372701c210ba0aa8675dd0d381448530a76b"},
         'sl': {'queryId' : 67, "secret_api_key": "97ccab8c67e9151fc1b65406209d4899ba62b7ef"},
-        'mr': {'queryId' : 68, "secret_api_key": "7216dd069d3b04780ec1ea19c12cc509adda7560"}
+        'mr': {'queryId' : 68, "secret_api_key": "7216dd069d3b04780ec1ea19c12cc509adda7560"},
+        'en': {'queryId' : 75, "secret_api_key": "f5eaea5824a49f73d20f57d20b775c4e54b148e4"}
     }
 
+    aggregation = 100
     for kind, queryDescriptor in queryDescriptorList.iteritems():
         print "Processing query %d" % queryDescriptor['queryId']
         queryJSON = get_query("http://data.obudget.org", queryDescriptor['queryId'], queryDescriptor['secret_api_key'])
+        print queryJSON
         budgetData = queryJSON['query_result']['data']['rows']
         lines = []
         i = 0
         for line in budgetData:
             lines.append(json.dumps(line))
             i = i + 1
-            if (i % 100 == 0 and len(lines) > 0):
+            if (i % aggregation == 0 and len(lines) > 0):
                 do_write("\n".join(lines),i,kind)
                 lines = []
