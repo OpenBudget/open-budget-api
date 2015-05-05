@@ -97,12 +97,7 @@ class Update(webapp2.RequestHandler):
             try:
                 # TODO: should we have a different index per item kind?
                 index = search.Index(name="OpenBudget")
-                i = 0
-                # Put upto 200 documents at a time for efficiency
-                while i < len(doc_list):
-                    topIndex = min(i+200, len(doc_list))
-                    index.put( doc_list[i:topIndex] )
-                    i += 200
+                index.put( doc_list )
             except search.Error:
                 logging.exception('Put failed')
 

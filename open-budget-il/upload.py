@@ -21,7 +21,7 @@ class UploadKind(object):
     @staticmethod
     def mysetattr(response,i,k,v):
         # verify that the key exists in the model
-        # there can be discreptancies 
+        # there can be discreptancies
         if hasattr(i, k):
             orig_v = i.__getattribute__(k)
             if type(orig_v) == list and type(v) == list:
@@ -75,8 +75,18 @@ class UploadKind(object):
             dbitem = dbitem[0]
         dbitems = [dbitem]
 
+        dirty = False
+        dirty_fields = set()
+        for k,v in item.iteritems():
+            field_dirty = self.mysetattr(response,dbitem,k,v)
+            if field_dirty:
+                dirty = True
+                dirty_fields.add(k)
+
         doc = None
-        if len(self.FTS_FIELDS) > 0:
+        # Update the document if the dirty_fields contain any of the FTS_FIELDS
+        fts_field_names = map(lambda x: x['name'], self.FTS_FIELDS)
+        if len(set(fts_field_names).intersection(dirty_fields)) > 0:
             # Build a unique document ID
             key_values = map(lambda x: str(getattr(dbitem, x)), self.KEY_FIELDS)
             doc_id = "%s-%s"%(self.KIND, "-".join(key_values))
@@ -93,13 +103,6 @@ class UploadKind(object):
                 doc_id = doc_id,
                 fields = fieldList)
 
-        dirty = False
-        dirty_fields = set()
-        for k,v in item.iteritems():
-            field_dirty = self.mysetattr(response,dbitem,k,v)
-            if field_dirty:
-                dirty = True
-                dirty_fields.add(k)
         if not dirty:
             dbitems = []
         return dbitems, to_delete, doc
