@@ -67,7 +67,7 @@ class UploadKind(object):
             classname = self.CLS.__name__
             item['_cls'] = classname
             response.write("No {0} for {1}".format(classname,
-                                                    " ".join("%s=%s" % x for x in key_args)))
+                                                    " ".join("{0}".format(x) for x in key_args)))
             dbitem = self.CLS()
         else:
             for x in dbitem[1:]:
@@ -86,11 +86,12 @@ class UploadKind(object):
         doc = None
         # Update the document if the dirty_fields contain any of the FTS_FIELDS
         fts_field_names = map(lambda x: x['name'], self.FTS_FIELDS)
-        if len(set(fts_field_names).intersection(dirty_fields)) > 0:
+        dirty_fts_fields = set(fts_field_names).intersection(dirty_fields)
+        if len(dirty_fts_fields) > 0:
             # Build a unique document ID
             key_values = map(lambda x: str(getattr(dbitem, x)), self.KEY_FIELDS)
             doc_id = "%s-%s"%(self.KIND, "-".join(key_values))
-            fieldList = []
+            fieldList = [search.TextField(name="type", value=self.KIND)]
             # Iterate over the FTS_FIELDS and build the field descriptor list
             for fieldDescriptor in self.FTS_FIELDS:
                 field = getattr(search, fieldDescriptor['type'])(
@@ -106,6 +107,15 @@ class UploadKind(object):
         if not dirty:
             dbitems = []
         return dbitems, to_delete, doc
+
+    def getSearchQuery(self, queryString, request):
+        searchQueryParts = [queryString, "type=%s"%self.KIND]
+        for field in self.KEY_FIELDS:
+            fieldVal = request.get(field)
+            if len(fieldVal) > 0:
+                searchQueryParts.append("%s=%s"%(field, fieldVal))
+
+        return "(%s)"%" AND ".join(searchQueryParts)
 
 class ULSystemProperty(UploadKind):
     KIND = "sp"
@@ -162,7 +172,11 @@ class ULBudgetLine(UploadKind):
     KIND = "bl"
     CLS = BudgetLine
     KEY_FIELDS = [ 'year', 'code' ]
-    FTS_FIELDS = [ {"name":"title", "type":"TextField"} ]
+    FTS_FIELDS = [
+        {"name":"code", "type":"TextField"},
+        {"name":"title", "type":"TextField"},
+        {"name":"year", "type":"NumberField"}
+    ]
 
     def preprocess_item(self,item):
         code = item['code']
@@ -223,6 +237,10 @@ class ULEntity(UploadKind):
     KIND = "en"
     CLS = Entity
     KEY_FIELDS = [ 'id', 'kind' ]
+    FTS_FIELDS = [
+        {"name":"id", "type":"TextField"},
+        {"name":"name", "type":"TextField"}
+    ]
 
     def preprocess_item(self,item):
         try:
@@ -277,9 +295,17 @@ class ULMRExemptionRecord(UploadKind):
 
         for f in ['start_date','end_date','claim_date','last_update_date']:
             d = item.get(f)
+            dateFormat = None
             if d is not None and d != '' and d != '-':
-                item[f] = datetime.datetime.strptime(d,'%Y-%m-%d').date()
+                if '-' in d:
+                    dateFormat = '%Y-%m-%d'
+                elif '/' in d:
+                    dateFormat = '%d/%m/%Y'
+
+            if dateFormat is not None:
+                item[f] = datetime.datetime.strptime(d,dateFormat).date()
             else:
+                # Unknown format or empty date field
                 item[f] = None
 
         add_prefixes(item,'budget_code')

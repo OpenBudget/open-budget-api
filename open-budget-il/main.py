@@ -207,13 +207,15 @@ class GenericApi(webapp2.RequestHandler):
 
         data = None
         key = self.key(*args,**kw)
-        if key is not None:
+        if key is not None and self.request.get("no-cache") != "true":
             key = key + "//%s/%s/%s" % (self.first,self.limit,self.output_format)
             data = memcache.get(key)
-        if data is not None:
-            ret = data.decode("zip")
 
+        if data is not None:
+            logging.error("found key in cache")
+            ret = data.decode("zip")
         else:
+            logging.error("no cache for key - querying")
             query = self.get_query(*args,**kw)
             if isinstance(query,ndb.Query):
                 if self.do_paging():
@@ -222,6 +224,7 @@ class GenericApi(webapp2.RequestHandler):
                     ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit) ]
             else:
                 ret = query
+            logging.error("ret: %s"%ret)
             if self.output_format == 'json':
                 self._set_response_headers()
                 if self.single and len(ret)>0:
@@ -648,6 +651,65 @@ class SearchApi(GenericApi):
 
         return None
 
+class FTSearchApi(GenericApi):
+
+    def do_paging(self):
+        return False
+
+    def get_querystr(self):
+        try:
+            return self.request.get('q')
+        except:
+            qs = self.request.query_string
+            if 'q=' in qs:
+                qs = qs[qs.index('q=')+2:]
+                qs = qs.split('&')[0]
+                return urllib.unquote(qs).decode('windows-1255')
+            else:
+                return None
+
+    def key(self):
+        queryString = self.get_querystr()
+        #logging.error("queryString: %s"%queryString)
+        return "FTSearchApi:%s" % (queryString)
+
+    def get_query(self):
+        queryString = self.get_querystr()
+        index = search.Index(name="OpenBudget")
+        results = []
+        searchableTypes = ['bl', 'en']
+        try:
+            limit = int(self.request.get('limit'))
+            searchQueryStringList = []
+            for handlerType in searchableTypes:
+                handler = upload_handlers[handlerType]
+                searchQueryStringList.append(handler.getSearchQuery(queryString, self.request))
+
+            #logging.error(searchQueryStringList)
+            searchQueryString = " OR ".join(searchQueryStringList)
+            #logging.error(searchQueryString)
+            resultsObject = index.search(
+                search.Query(
+                    # TODO the search string should be defined in each class
+                    query_string=searchQueryString,
+                    options=search.QueryOptions(limit=limit)
+                )
+            )
+
+            # Iterate over the documents in the results
+            for scored_document in resultsObject:
+                # handle results
+                resultDescriptor = {}
+                for field in scored_document.fields:
+                    resultDescriptor[field.name] = field.value
+
+                results.append(resultDescriptor)
+
+        except search.Error:
+            logging.exception('Search failed')
+
+        return results
+
 class PendingChangesRss(webapp2.RequestHandler):
 
     def get(self):
@@ -872,10 +934,12 @@ api = webapp2.WSGIApplication([
 
     ('/api/describe/(.+)', DescribeApi),
 
-    ('/api/(company)_record/([0-9]+)', CompanyNGOApi),
-    ('/api/(ngo)_record/([0-9]+)', CompanyNGOApi),
+    ('/api/search/full_text', FTSearchApi),
     ('/api/search/([a-z]+)', SearchApi),
     ('/api/search/([a-z]+)/([0-9]+)', SearchApi),
+
+    ('/api/(company)_record/([0-9]+)', CompanyNGOApi),
+    ('/api/(ngo)_record/([0-9]+)', CompanyNGOApi),
     ('/api/sysprop/(.+)', SystemPropertyApi),
     ('/api/pdf/([^/]+)', PdfStatusApi),
     ('/api/update/([a-z]+)', Update),
