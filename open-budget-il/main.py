@@ -212,10 +212,8 @@ class GenericApi(webapp2.RequestHandler):
             data = memcache.get(key)
 
         if data is not None:
-            logging.error("found key in cache")
             ret = data.decode("zip")
         else:
-            logging.error("no cache for key - querying")
             query = self.get_query(*args,**kw)
             if isinstance(query,ndb.Query):
                 if self.do_paging():
@@ -224,7 +222,6 @@ class GenericApi(webapp2.RequestHandler):
                     ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit) ]
             else:
                 ret = query
-            logging.error("ret: %s"%ret)
             if self.output_format == 'json':
                 self._set_response_headers()
                 if self.single and len(ret)>0:
@@ -475,7 +472,7 @@ class SupportsApi(GenericApi):
             else:
                 lines = SupportLine.query(SupportLine.recipient.IN(recipients)).order(SupportLine.code,SupportLine.kind,SupportLine.year)
         elif args[0] == 'kind':
-            logging.error('SupportsApi:kind args=%r' % (args,))
+            #logging.error('SupportsApi:kind args=%r' % (args,))
             kind = args[1]
             if len(args)>2:
                 code = args[2]
@@ -486,7 +483,7 @@ class SupportsApi(GenericApi):
                     else:
                         year = int(args[3])
                         lines = SupportLine.query(SupportLine.entity_kind==kind,SupportLine.prefixes==code,SupportLine.year==year)
-                        logging.error('SupportsApi:kind args=%r' % (args,))
+                        #logging.error('SupportsApi:kind args=%r' % (args,))
                         if len(args)>4:
                             if args[4] == 'aggregated':
                                 lines = self.aggregate_lines(lines,['title','year'])
