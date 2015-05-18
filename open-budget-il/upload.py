@@ -87,26 +87,62 @@ class UploadKind(object):
         # Update the document if the dirty_fields contain any of the FTS_FIELDS
         fts_field_names = map(lambda x: x['name'], self.FTS_FIELDS)
         dirty_fts_fields = set(fts_field_names).intersection(dirty_fields)
+
+        #if 1: # - Use to force update when debugging
         if len(dirty_fts_fields) > 0:
             # Build a unique document ID
             key_values = map(lambda x: str(getattr(dbitem, x)), self.KEY_FIELDS)
-            doc_id = "%s-%s"%(self.KIND, "-".join(key_values))
+            docId = "%s-%s"%(self.KIND, "-".join(key_values))
             fieldList = [search.TextField(name="type", value=self.KIND)]
+
             # Iterate over the FTS_FIELDS and build the field descriptor list
+            autocompleteFieldList = []
             for fieldDescriptor in self.FTS_FIELDS:
+                # Obtain the field value
+                fieldValue = getattr(dbitem, fieldDescriptor['name'])
+                # Check if the field should be tokenized for autocomplete
+                if "autocomplete" in fieldDescriptor and \
+                    fieldDescriptor["autocomplete"] == True:
+                    autocompleteFieldList.append(fieldValue)
+
+                # Build the GAE field object
                 field = getattr(search, fieldDescriptor['type'])(
                     name=fieldDescriptor['name'],
-                    value=getattr(dbitem, fieldDescriptor['name']))
-
+                    value=fieldValue)
+                # Store the field object so it can be used in the GAE document
+                # object
                 fieldList.append(field)
+
             # Create a new document
             doc = search.Document(
-                doc_id = doc_id,
+                doc_id = docId,
                 fields = fieldList)
+
+            # Tokenize the search terms for automcomplete
+            for searchTerm in autocompleteFieldList:
+                self.tokenizeSearchTerm(searchTerm, docId)
 
         if not dirty:
             dbitems = []
         return dbitems, to_delete, doc
+
+    def tokenizeSearchTerm(self, searchTerm, docId):
+        # Tokenize the search term
+        tokenList = []
+        for word in searchTerm.split():
+            for i in range(len(word)):
+                tokenList.append(word[0:i+1])
+
+        # Add an entry in the autocomplete index
+        index = search.Index(name='autocomplete')
+        searchTokens = ','.join(tokenList)
+        document = search.Document(
+            doc_id=docId,
+            fields=[
+                search.TextField(name="type", value=self.KIND),
+                search.TextField(name='searchTokens', value=searchTokens)
+            ])
+        index.put(document)
 
     def getSearchQuery(self, queryString, request):
         searchQueryParts = [queryString, "type=%s"%self.KIND]
@@ -174,7 +210,7 @@ class ULBudgetLine(UploadKind):
     KEY_FIELDS = [ 'year', 'code' ]
     FTS_FIELDS = [
         {"name":"code", "type":"TextField"},
-        {"name":"title", "type":"TextField"},
+        {"name":"title", "type":"TextField", "autocomplete": True},
         {"name":"year", "type":"NumberField"}
     ]
 

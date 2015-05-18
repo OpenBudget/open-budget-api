@@ -170,7 +170,7 @@ def get_participants(budget_code,year=None,month=None,day=None):
 class GenericApi(webapp2.RequestHandler):
 
     def _set_response_headers(self):
-        self.response.headers['Content-Type'] = 'application/json'
+        self.response.headers['Content-Type'] = 'application/json; charset=utf-8'
         self.response.headers['Access-Control-Allow-Origin'] = "*"
         self.response.headers['Access-Control-Max-Age'] = '604800'
         self.response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, If-Match, If-Modified-Since, If-None-Match, If-Unmodified-Since, X-Requested-With, Cookie'
@@ -676,22 +676,21 @@ class FTSearchApi(GenericApi):
         results = []
         searchableTypes = ['bl', 'en']
         try:
-            limit = int(self.request.get('limit'))
+            # Build the search query list
             searchQueryStringList = []
             for handlerType in searchableTypes:
                 handler = upload_handlers[handlerType]
                 searchQueryStringList.append(handler.getSearchQuery(queryString, self.request))
 
-            #logging.error(searchQueryStringList)
             searchQueryString = " OR ".join(searchQueryStringList)
-            #logging.error(searchQueryString)
-            resultsObject = index.search(
-                search.Query(
-                    # TODO the search string should be defined in each class
-                    query_string=searchQueryString,
-                    options=search.QueryOptions(limit=limit)
-                )
-            )
+            searchQuery = search.Query(query_string=searchQueryString)
+            try:
+                limit = int(self.request.get('limit'))
+                search.query.setOptions(options=search.QueryOptions(limit=limit))
+            except:
+                pass
+
+            resultsObject = index.search(searchQuery)
 
             # Iterate over the documents in the results
             for scored_document in resultsObject:
@@ -701,6 +700,58 @@ class FTSearchApi(GenericApi):
                     resultDescriptor[field.name] = field.value
 
                 results.append(resultDescriptor)
+
+        except search.Error:
+            logging.exception('Search failed')
+
+        return results
+
+class AutocompleteApi(GenericApi):
+
+    def do_paging(self):
+        return False
+
+    def get_querystr(self):
+        try:
+            return self.request.get('q')
+        except:
+            qs = self.request.query_string
+            if 'q=' in qs:
+                qs = qs[qs.index('q=')+2:]
+                qs = qs.split('&')[0]
+                return urllib.unquote(qs).decode('windows-1255')
+            else:
+                return None
+
+    def key(self):
+        queryString = self.get_querystr()
+        return "AutocompleteApi:%s" % (queryString)
+
+    def get_query(self):
+        queryString = self.get_querystr()
+        autocompleteIndex = search.Index(name="autocomplete")
+        budgetIndex = search.Index(name="OpenBudget")
+        results = []
+        try:
+            searchQuery = search.Query(query_string=queryString)
+            try:
+                limit = int(self.request.get('limit'))
+                search.query.setOptions(options=search.QueryOptions(limit=limit))
+            except:
+                pass
+
+            resultsObject = autocompleteIndex.search(searchQuery)
+
+            # Iterate over the documents in the results
+            for autocompletDoc in resultsObject:
+                doc = budgetIndex.get(autocompletDoc.doc_id)
+                if doc is not None:
+                    # handle results
+                    resultDescriptor = {}
+                    for field in doc.fields:
+                        resultDescriptor[field.name] = field.value
+
+                    results.append(resultDescriptor)
 
         except search.Error:
             logging.exception('Search failed')
@@ -932,6 +983,7 @@ api = webapp2.WSGIApplication([
     ('/api/describe/(.+)', DescribeApi),
 
     ('/api/search/full_text', FTSearchApi),
+    ('/api/search/autocomplete', AutocompleteApi),
     ('/api/search/([a-z]+)', SearchApi),
     ('/api/search/([a-z]+)/([0-9]+)', SearchApi),
 
