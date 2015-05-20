@@ -4,6 +4,8 @@ import logging
 import datetime
 import re
 
+from collections import namedtuple
+
 from google.appengine.api import search
 
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
@@ -17,6 +19,8 @@ def add_prefixes(item,code_field):
         prefixes = [ code[:l] for l in range(2,len(code),2) ]
         prefixes.append(code)
         item["prefixes"] = prefixes
+
+FTSField = namedtuple('FTSField', 'name type autocomplete')
 
 class UploadKind(object):
     FTS_FIELDS = []
@@ -91,17 +95,16 @@ class UploadKind(object):
 
         doc = None
         # Update the document if the dirty_fields contain any of the FTS_FIELDS
-        fts_field_names = map(lambda x: x['name'], self.FTS_FIELDS)
+        fts_field_names = map(lambda x: x.name, self.FTS_FIELDS)
         dirty_fts_fields = set(fts_field_names).intersection(dirty_fields)
 
         #logging.debug("dirty_fts_fields: %r, current_doc=%r, current_ver=%r" % \
         #                (dirty_fts_fields,current_doc,current_doc[self.VERSION_FIELD_NAME] if current_doc is not None else "N/A"))
 
-        #if len(dirty_fts_fields) > 0 or current_doc is None or \
-        #    current_doc[self.VERSION_FIELD_NAME] is None or \
-        #    current_doc[self.VERSION_FIELD_NAME] < self.FTS_VERSION:
+        if len(dirty_fts_fields) > 0 or current_doc is None or \
+            current_doc[self.VERSION_FIELD_NAME] is None or \
+            current_doc[self.VERSION_FIELD_NAME] < self.FTS_VERSION:
 
-        if 1:
             doc_id = self.get_doc_id(item)
             #logging.debug('doc_id=%s' % doc_id)
             fieldList = [search.TextField(name="type", value=classname),
@@ -110,15 +113,14 @@ class UploadKind(object):
             autocompleteFieldList = []
             for fieldDescriptor in self.FTS_FIELDS:
                 # Obtain the field value
-                fieldValue = getattr(dbitem, fieldDescriptor['name'])
+                fieldValue = getattr(dbitem, fieldDescriptor.name)
                 # Check if the field should be tokenized for autocomplete
-                if "autocomplete" in fieldDescriptor and \
-                    fieldDescriptor["autocomplete"] == True:
+                if fieldDescriptor.autocomplete == True:
                     autocompleteFieldList.append(fieldValue)
 
                 # Build the GAE field object
-                field = getattr(search, fieldDescriptor['type'])(
-                    name=fieldDescriptor['name'],
+                field = getattr(search, fieldDescriptor.type)(
+                    name=fieldDescriptor.name,
                     value=fieldValue)
                 # Store the field object so it can be used in the GAE document
                 # object
@@ -159,7 +161,7 @@ class UploadKind(object):
         if len(self.FTS_FIELDS) > 0:
             searchQueryParts = [queryString, "type=%s"%self.CLS.__name__]
             for fieldDescriptor in self.FTS_FIELDS:
-                field = fieldDescriptor['name']
+                field = fieldDescriptor.name
                 fieldVal = request.get(field)
                 if len(fieldVal) > 0:
                     searchQueryParts.append("%s=%s"%(field, fieldVal))
@@ -243,9 +245,9 @@ class ULBudgetLine(UploadKind):
     # extended with new fields and you don't need to keep any order when
     # extracting values
     FTS_FIELDS = [
-        {"name":"code", "type":"TextField"},
-        {"name":"title", "type":"TextField", "autocomplete": True},
-        {"name":"year", "type":"NumberField"}
+        FTSField('code', 'TextField', False),
+        FTSField('title', 'TextField', True),
+        FTSField('year', 'NumberField', False)
     ]
     FTS_TOKENIZE_FIELDS = ['title']
 
@@ -316,8 +318,8 @@ class ULEntity(UploadKind):
     CLS = Entity
     KEY_FIELDS = [ 'id', 'kind' ]
     FTS_FIELDS = [
-        {"name":"id", "type":"TextField"},
-        {"name":"name", "type":"TextField", "autocomplete": True}
+        FTSField('id', 'TextField', False),
+        FTSField('name', 'TextField', True)
     ]
     FTS_TOKENIZE_FIELDS = ['name']
 
