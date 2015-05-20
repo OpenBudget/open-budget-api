@@ -1,5 +1,8 @@
+#encoding: utf8
+
 import logging
 import datetime
+import re
 
 from google.appengine.api import search
 
@@ -17,6 +20,10 @@ def add_prefixes(item,code_field):
 
 class UploadKind(object):
     FTS_FIELDS = []
+    FTS_TOKENIZE_FIELDS = []
+    FTS_VERSION = 2
+    VERSION_FIELD_NAME = 'ver_auto'
+    TOKENS_FIELD_NAME = 'tokens_auto'
 
     @staticmethod
     def mysetattr(response,i,k,v):
@@ -27,7 +34,6 @@ class UploadKind(object):
             if type(orig_v) == list and type(v) == list:
                 try:
                     orig_v.sort()
-                    logging.debug("About to sort %s:%r" % (k,v))
                     v.sort()
                     if len(v) != len(orig_v) or any(x!=y for x,y in zip(v,orig_v)):
                         i.__setattr__(k,v)
@@ -54,7 +60,7 @@ class UploadKind(object):
     def preprocess_item(self,item):
         return item
 
-    def handle(self, response, item):
+    def handle(self, response, item, current_doc):
         to_delete = []
         item = self.preprocess_item(item)
         vals = [item[f] for f in self.KEY_FIELDS]
@@ -63,8 +69,8 @@ class UploadKind(object):
         key_args = zip(self.KEY_FIELDS,vals)
         query_args = [getattr(self.CLS, f)==val for f,val in key_args]
         dbitem = self.CLS.query(*query_args).fetch(100)
+        classname = self.CLS.__name__
         if len(dbitem) == 0:
-            classname = self.CLS.__name__
             item['_cls'] = classname
             response.write("No {0} for {1}".format(classname,
                                                     " ".join("{0}".format(x) for x in key_args)))
@@ -88,13 +94,18 @@ class UploadKind(object):
         fts_field_names = map(lambda x: x['name'], self.FTS_FIELDS)
         dirty_fts_fields = set(fts_field_names).intersection(dirty_fields)
 
-        #if 1: # - Use to force update when debugging
-        if len(dirty_fts_fields) > 0:
-            # Build a unique document ID
-            key_values = map(lambda x: str(getattr(dbitem, x)), self.KEY_FIELDS)
-            docId = "%s-%s"%(self.KIND, "-".join(key_values))
-            fieldList = [search.TextField(name="type", value=self.KIND)]
+        #logging.debug("dirty_fts_fields: %r, current_doc=%r, current_ver=%r" % \
+        #                (dirty_fts_fields,current_doc,current_doc[self.VERSION_FIELD_NAME] if current_doc is not None else "N/A"))
 
+        #if len(dirty_fts_fields) > 0 or current_doc is None or \
+        #    current_doc[self.VERSION_FIELD_NAME] is None or \
+        #    current_doc[self.VERSION_FIELD_NAME] < self.FTS_VERSION:
+
+        if 1:
+            doc_id = self.get_doc_id(item)
+            #logging.debug('doc_id=%s' % doc_id)
+            fieldList = [search.TextField(name="type", value=classname),
+                         search.NumberField(name=self.VERSION_FIELD_NAME, value=self.FTS_VERSION)]
             # Iterate over the FTS_FIELDS and build the field descriptor list
             autocompleteFieldList = []
             for fieldDescriptor in self.FTS_FIELDS:
@@ -113,45 +124,65 @@ class UploadKind(object):
                 # object
                 fieldList.append(field)
 
+            # Tokenize the search terms for automcomplete
+            tokens = set()
+            for fieldValue in autocompleteFieldList:
+                tokens.update(self.get_tokens(fieldValue))
+            # Create a token field if there are tokens
+            if len(tokens)>0:
+                #logging.debug(u'tokenized -> %r' % (tokens))
+                fieldList.append(search.TextField(name=self.TOKENS_FIELD_NAME,value=" ".join(tokens)))
+
+            #logging.debug('fieldList=%r' % fieldList)
             # Create a new document
             doc = search.Document(
-                doc_id = docId,
-                fields = fieldList)
-
-            # Tokenize the search terms for automcomplete
-            for searchTerm in autocompleteFieldList:
-                self.tokenizeSearchTerm(searchTerm, docId)
+                doc_id = doc_id,
+                fields = fieldList,
+                rank = self.get_doc_rank(item))
 
         if not dirty:
             dbitems = []
         return dbitems, to_delete, doc
 
-    def tokenizeSearchTerm(self, searchTerm, docId):
-        # Tokenize the search term
-        tokenList = []
-        for word in searchTerm.split():
-            for i in range(len(word)):
-                tokenList.append(word[0:i+1])
+    def get_doc_id(self,item):
+        # Build a unique document ID
+        key_values = map(lambda x: unicode(item.get(x)).encode('utf8').encode('hex'), self.KEY_FIELDS)
+        doc_id = "%s-%s"%(self.KIND, "-".join(key_values))
+        return doc_id
 
-        # Add an entry in the autocomplete index
-        index = search.Index(name='autocomplete')
-        searchTokens = ','.join(tokenList)
-        document = search.Document(
-            doc_id=docId,
-            fields=[
-                search.TextField(name="type", value=self.KIND),
-                search.TextField(name='searchTokens', value=searchTokens)
-            ])
-        index.put(document)
+    def get_doc_rank(self,item):
+        # Returns ranking for the document (None if N/A)
+        return None
 
-    def getSearchQuery(self, queryString, request):
-        searchQueryParts = [queryString, "type=%s"%self.KIND]
-        for field in self.KEY_FIELDS:
-            fieldVal = request.get(field)
-            if len(fieldVal) > 0:
-                searchQueryParts.append("%s=%s"%(field, fieldVal))
+    def get_search_query(self, queryString, request):
+        searchQueryParts = []
+        if len(self.FTS_FIELDS) > 0:
+            searchQueryParts = [queryString, "type=%s"%self.CLS.__name__]
+            for fieldDescriptor in self.FTS_FIELDS:
+                field = fieldDescriptor['name']
+                fieldVal = request.get(field)
+                if len(fieldVal) > 0:
+                    searchQueryParts.append("%s=%s"%(field, fieldVal))
 
-        return "(%s)"%" AND ".join(searchQueryParts)
+        if len(searchQueryParts) > 0:
+            return "(%s)"%" AND ".join(searchQueryParts)
+        else:
+            return None
+
+    WORDS = re.compile(u'([א-ת0-9a-zA-Z]+)')
+
+    def get_tokens(self,string):
+        # Find all distinct words
+        splits = self.WORDS.findall(string)
+        # Remove potential initials
+        subsplits = [ x[1:] for x in splits if x[0] in [u'ה', u'ב', u'ו', u'מ', u'ב', u'כ', u'ל'] and len(x) > 3 ]
+        splits.extend(subsplits)
+        tokens = set()
+        # Get all prefixes
+        for split in splits:
+            tokens.update(set([ split[:l] for l in range(1,len(split)+1) ]))
+        #logging.debug(u'tokenizing %s -> %r' %(string,tokens))
+        return tokens
 
 class ULSystemProperty(UploadKind):
     KIND = "sp"
@@ -208,17 +239,28 @@ class ULBudgetLine(UploadKind):
     KIND = "bl"
     CLS = BudgetLine
     KEY_FIELDS = [ 'year', 'code' ]
+    # Yonatan: i'd like to stick with dictionaries as they are more easily
+    # extended with new fields and you don't need to keep any order when
+    # extracting values
     FTS_FIELDS = [
         {"name":"code", "type":"TextField"},
         {"name":"title", "type":"TextField", "autocomplete": True},
         {"name":"year", "type":"NumberField"}
     ]
+    FTS_TOKENIZE_FIELDS = ['title']
 
     def preprocess_item(self,item):
         code = item['code']
         add_prefixes(item, 'code')
         item["depth"] = len(code)/2 - 1
         return item
+
+    def get_doc_rank(self,item):
+        # rank = int("1"+"%08d"%int("0"+item['code'][2:]))
+        # rank = 200000000 - rank
+        # rank = rank * 40 + item['year']
+        rank = max(item.get('net_revised',0),0)
+        return rank
 
 class ULChangeLine(UploadKind):
     KIND = "cl"
@@ -275,8 +317,9 @@ class ULEntity(UploadKind):
     KEY_FIELDS = [ 'id', 'kind' ]
     FTS_FIELDS = [
         {"name":"id", "type":"TextField"},
-        {"name":"name", "type":"TextField"}
+        {"name":"name", "type":"TextField", "autocomplete": True}
     ]
+    FTS_TOKENIZE_FIELDS = ['name']
 
     def preprocess_item(self,item):
         try:
@@ -311,6 +354,7 @@ class ULMRExemptionRecord(UploadKind):
                 doc['update_time'] = None
             docs.append( MRExemptionRecordDocument(**doc) )
         item['documents'] = docs
+        item['history'] = None
         # history_items = []
         # for history_item in item.get('history',[]):
         #     if history_item['date'] != '-':

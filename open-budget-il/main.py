@@ -78,12 +78,15 @@ class Update(webapp2.RequestHandler):
         except Exception,e:
             print body
             raise
+        index = search.Index(name="OpenBudget")
         to_put = []
         to_delete = []
         doc_list = []
         handler = upload_handlers[what]
         for item in to_update:
-            items, todel, doc = handler.handle(self.response,item)
+            doc_id = handler.get_doc_id(item)
+            doc = index.get(doc_id)
+            items, todel, doc = handler.handle(self.response,item,doc)
             to_delete.extend(todel)
             to_put.extend(items)
             if doc != None:
@@ -96,7 +99,6 @@ class Update(webapp2.RequestHandler):
         if len(doc_list) > 0:
             try:
                 # TODO: should we have a different index per item kind?
-                index = search.Index(name="OpenBudget")
                 index.put( doc_list )
             except search.Error:
                 logging.exception('Put failed')
@@ -211,6 +213,9 @@ class GenericApi(webapp2.RequestHandler):
             key = key + "//%s/%s/%s" % (self.first,self.limit,self.output_format)
             data = memcache.get(key)
 
+        # DEBUG HACK
+        data = None
+        # DEBUG HACK
         if data is not None:
             ret = data.decode("zip")
         else:
@@ -674,13 +679,13 @@ class FTSearchApi(GenericApi):
         queryString = self.get_querystr()
         index = search.Index(name="OpenBudget")
         results = []
-        searchableTypes = ['bl', 'en']
         try:
             # Build the search query list
             searchQueryStringList = []
-            for handlerType in searchableTypes:
-                handler = upload_handlers[handlerType]
-                searchQueryStringList.append(handler.getSearchQuery(queryString, self.request))
+            for handler in upload_handlers.values():
+                sq = handler.get_search_query(queryString, self.request)
+                if sq is not None:
+                    searchQueryStringList.append(sq)
 
             searchQueryString = " OR ".join(searchQueryStringList)
             searchQuery = search.Query(query_string=searchQueryString)
@@ -690,6 +695,7 @@ class FTSearchApi(GenericApi):
             except:
                 pass
 
+            logging.info(searchQueryString)
             resultsObject = index.search(searchQuery)
 
             # Iterate over the documents in the results
