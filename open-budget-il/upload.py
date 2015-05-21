@@ -171,7 +171,10 @@ class UploadKind(object):
         else:
             searchQuery = None
 
-        return (searchQuery, len(searchQueryParts))
+        # 1st argument - search query string
+        # 2nd argument - boolean saying if the handler used
+        #                additional query params
+        return (searchQuery, len(searchQueryParts) > 1)
 
     WORDS = re.compile(u'([א-ת0-9a-zA-Z]+)')
 

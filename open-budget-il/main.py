@@ -680,20 +680,18 @@ class FTSearchApi(GenericApi):
         try:
             # Build the search query list
             searchQueryStringList = []
-            additionalQueryFields = False
+            longQueryForm = False
             for handler in upload_handlers.values():
-                sq, numOfQueryParts = handler.get_search_query(self.request)
+                sq, additionalQueryFields = handler.get_search_query(self.request)
                 if sq is not None:
                     searchQueryStringList.append(sq)
-                # Test to see if the handler used additional query params
-                if numOfQueryParts > 1:
-                    additionalQueryFields = True
+                # Use the long query form if any handler used any additional query
+                # parameters as filters
+                longQueryForm = (longQueryForm or additionalQueryFields)
 
-            if additionalQueryFields:
-                # If any query params were used we must use the long query form
+            if longQueryForm:
                 searchQueryString = "%s AND (%s)"%(queryString, " OR ".join(searchQueryStringList))
             else:
-                # No query params were used - fall back to a simple query
                 searchQueryString = queryString
 
             searchQuery = search.Query(query_string=searchQueryString)
