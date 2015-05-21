@@ -156,10 +156,10 @@ class UploadKind(object):
         # Returns ranking for the document (None if N/A)
         return None
 
-    def get_search_query(self, queryString, request):
+    def get_search_query(self, request):
         searchQueryParts = []
         if len(self.FTS_FIELDS) > 0:
-            searchQueryParts = [queryString, "type=%s"%self.CLS.__name__]
+            searchQueryParts = ["type=%s"%self.CLS.__name__]
             for fieldDescriptor in self.FTS_FIELDS:
                 field = fieldDescriptor.name
                 fieldVal = request.get(field)
@@ -167,9 +167,11 @@ class UploadKind(object):
                     searchQueryParts.append("%s=%s"%(field, fieldVal))
 
         if len(searchQueryParts) > 0:
-            return "(%s)"%" AND ".join(searchQueryParts)
+            searchQuery = "(%s)"%" AND ".join(searchQueryParts)
         else:
-            return None
+            searchQuery = None
+
+        return (searchQuery, len(searchQueryParts))
 
     WORDS = re.compile(u'([א-ת0-9a-zA-Z]+)')
 

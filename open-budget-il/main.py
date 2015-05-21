@@ -214,6 +214,7 @@ class GenericApi(webapp2.RequestHandler):
             data = memcache.get(key)
 
         if data is not None:
+            #logging.info("Found cached data for key %s"%key)
             ret = data.decode("zip")
         else:
             query = self.get_query(*args,**kw)
@@ -668,7 +669,7 @@ class FTSearchApi(GenericApi):
                 return None
 
     def key(self):
-        queryString = self.get_querystr()
+        queryString = self.request.query_string
         #logging.error("queryString: %s"%queryString)
         return "FTSearchApi:%s" % (queryString)
 
@@ -679,12 +680,22 @@ class FTSearchApi(GenericApi):
         try:
             # Build the search query list
             searchQueryStringList = []
+            additionalQueryFields = False
             for handler in upload_handlers.values():
-                sq = handler.get_search_query(queryString, self.request)
+                sq, numOfQueryParts = handler.get_search_query(self.request)
                 if sq is not None:
                     searchQueryStringList.append(sq)
+                # Test to see if the handler used additional query params
+                if numOfQueryParts > 1:
+                    additionalQueryFields = True
 
-            searchQueryString = " OR ".join(searchQueryStringList)
+            if additionalQueryFields:
+                # If any query params were used we must use the long query form
+                searchQueryString = "%s AND (%s)"%(queryString, " OR ".join(searchQueryStringList))
+            else:
+                # No query params were used - fall back to a simple query
+                searchQueryString = queryString
+
             searchQuery = search.Query(query_string=searchQueryString)
             try:
                 limit = int(self.limit)
