@@ -216,13 +216,20 @@ class ULBudgetApproval(UploadKind):
     CLS = BudgetApproval
     KEY_FIELDS = [ 'year' ]
 
+    def setDateField(self, fieldName, item):
+        value = item.get(fieldName)
+        if value is not None:
+            if isinstance(value, int) or isinstance(value, float):
+                item[fieldName] = datetime.datetime.fromtimestamp(value).date()
+            else:
+                dateFormat = '%Y-%m-%d'
+                item[fieldName] = datetime.datetime.strptime(value,dateFormat).date()
+
     def preprocess_item(self,item):
-        if item.get('approval_date') is not None:
-            item['approval_date'] = datetime.datetime.fromtimestamp(item['approval_date']).date()
-        if item.get('effect_date') is not None:
-            item['effect_date'] = datetime.datetime.fromtimestamp(item['effect_date']).date()
-        if item.get('end_date') is not None:
-            item['end_date'] = datetime.datetime.fromtimestamp(item['end_date']).date()
+        self.setDateField('approval_date', item)
+        self.setDateField('effect_date', item)
+        self.setDateField('end_date', item)
+
         return item
 
 class ULParticipantTimeline(UploadKind):
