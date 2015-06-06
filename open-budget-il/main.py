@@ -435,7 +435,7 @@ class ExemptionsApi(GenericApi):
         return lines
 
 
-class AttachmentsApi(webapp2.RequestHandler):
+class ExemptionsDocumentsApi(webapp2.RequestHandler):
 
     def _set_response_headers(self):
         self.response.headers['Content-Type'] = 'application/octet-stream'
@@ -447,10 +447,18 @@ class AttachmentsApi(webapp2.RequestHandler):
     def get(self, *args, **kw):
         self._set_response_headers()
         url = self.request.get('url')
-        ret = self.decode(url)
-        ext = ret[0].split('.')[-1].encode("ascii", "ignore")
-        self.response.headers['Content-Disposition'] = 'attachment; filename=document.' + ext
-        self.response.write(ret[1])
+        if not url.endswith('signed'):
+            name, ret = self.transparent(url)
+        else:
+            name, ret = self.decode(url)
+
+        self.response.headers['Content-Disposition'] = 'attachment; filename=' + name
+        self.response.write(ret)
+
+    def transparent(self, url):
+        response = urllib2.urlopen(url)
+        ret = response.read()
+        return url.split('/')[-1].encode("ascii", "ignore"), ret
 
     def decode(self, url):
         response = urllib2.urlopen(url)
@@ -470,8 +478,8 @@ class AttachmentsApi(webapp2.RequestHandler):
         # Get the filename.
         filename_elem = doc.find('.//OptionalDataParams/FileName')
         filename = filename_elem.text
-
-        return filename, data
+        ext = filename.split('.')[-1].encode("ascii", "ignore")
+        return 'document.' + ext, data
 
 
 class SupportsApi(GenericApi):
@@ -976,8 +984,7 @@ api = webapp2.WSGIApplication([
     ('/api/exemption/(budget)/([0-9]+)', ExemptionsApi),
     ('/api/exemption/(new)', ExemptionsApi),
     ('/api/exemption/(updated)/([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])/([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])', ExemptionsApi),
-
-    ('/api/attachment', AttachmentsApi),
+    ('/api/exemption/document', ExemptionsDocumentsApi),
 
     ('/api/thumbnail/(.+)', ThumbnailApi),
     ('/api/participants/([0-9]+)', ParticipantApi),
