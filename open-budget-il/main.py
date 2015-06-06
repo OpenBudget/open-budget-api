@@ -11,6 +11,7 @@ import urllib
 import csv
 import StringIO
 import itertools
+import urllib2
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
@@ -24,6 +25,8 @@ from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, Bu
 from models import MRExemptionRecord, MRExemptionRecordDocument, MRExemptionRecordHistory
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
 from upload import upload_handlers
+from base64 import  b64decode
+from xml.etree import ElementTree as et
 
 INFLATION = {1992: 2.338071159424868,
  1993: 2.1016785142253185,
@@ -430,6 +433,46 @@ class ExemptionsApi(GenericApi):
             lines = MRExemptionRecord.query().order(-MRExemptionRecord.last_update_date)
 
         return lines
+
+
+class AttachmentsApi(webapp2.RequestHandler):
+
+    def _set_response_headers(self):
+        self.response.headers['Content-Type'] = 'application/octet-stream'
+        self.response.headers['Access-Control-Allow-Origin'] = "*"
+        self.response.headers['Access-Control-Max-Age'] = '604800'
+        self.response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, If-Match, If-Modified-Since, If-None-Match, If-Unmodified-Since, X-Requested-With, Cookie'
+        self.response.headers['Access-Control-Allow-Credentials'] = 'true'
+
+    def get(self, *args, **kw):
+        self._set_response_headers()
+        url = self.request.get('url')
+        ret = self.decode(url)
+        ext = ret[0].split('.')[-1].encode("ascii", "ignore")
+        self.response.headers['Content-Disposition'] = 'attachment; filename=document.' + ext
+        self.response.write(ret[1])
+
+    def decode(self, url):
+        response = urllib2.urlopen(url)
+
+        doc = et.parse(response)
+
+        # Get rid of the goddamn namespaces.
+        namespace_re = re.compile(r'\{.*\}')
+        for elem in doc.iter():
+            elem.tag = namespace_re.sub('', elem.tag)
+
+        # Get the data and decode it.
+        data_elem = doc.find('./SignedObject/SignedInfo/Data')
+        data_b64 = data_elem.text
+        data = b64decode(data_b64)
+
+        # Get the filename.
+        filename_elem = doc.find('.//OptionalDataParams/FileName')
+        filename = filename_elem.text
+
+        return filename, data
+
 
 class SupportsApi(GenericApi):
 
@@ -933,6 +976,8 @@ api = webapp2.WSGIApplication([
     ('/api/exemption/(budget)/([0-9]+)', ExemptionsApi),
     ('/api/exemption/(new)', ExemptionsApi),
     ('/api/exemption/(updated)/([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])/([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])', ExemptionsApi),
+
+    ('/api/attachment', AttachmentsApi),
 
     ('/api/thumbnail/(.+)', ThumbnailApi),
     ('/api/participants/([0-9]+)', ParticipantApi),
