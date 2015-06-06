@@ -25,7 +25,6 @@ from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, Bu
 from models import MRExemptionRecord, MRExemptionRecordDocument, MRExemptionRecordHistory
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
 from upload import upload_handlers
-from base64 import  b64decode
 from xml.etree import ElementTree as et
 
 INFLATION = {1992: 2.338071159424868,
@@ -473,7 +472,7 @@ class ExemptionsDocumentsApi(webapp2.RequestHandler):
         # Get the data and decode it.
         data_elem = doc.find('./SignedObject/SignedInfo/Data')
         data_b64 = data_elem.text
-        data = b64decode(data_b64)
+        data = data_b64.decode('base64')
 
         # Get the filename.
         filename_elem = doc.find('.//OptionalDataParams/FileName')
