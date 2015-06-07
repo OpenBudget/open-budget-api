@@ -32,7 +32,8 @@ API_KEY = "d262c9f9-a77e-4adb-b73a-ce818bb05b8b"
 
 def do_write(data,i,kind):
     try:
-        u = urllib2.urlopen('http://localhost:8080/api/update/%s?apikey=%s' % (kind,API_KEY), data).read()
+        url = 'http://localhost:8080/api/update/%s?apikey=%s' % (kind,API_KEY)
+        u = urllib2.urlopen(url, data).read()
         print u,i
     except Exception,e:
         print "Failed to upload batch %d: %s" % (i,e)
@@ -43,20 +44,21 @@ if __name__=="__main__":
         'cl': {'queryId' : 66, "secret_api_key": "972b372701c210ba0aa8675dd0d381448530a76b"},
         'sl': {'queryId' : 67, "secret_api_key": "97ccab8c67e9151fc1b65406209d4899ba62b7ef"},
         'mr': {'queryId' : 68, "secret_api_key": "7216dd069d3b04780ec1ea19c12cc509adda7560"},
-        'en': {'queryId' : 75, "secret_api_key": "f5eaea5824a49f73d20f57d20b775c4e54b148e4"}
+        'en': {'queryId' : 75, "secret_api_key": "f5eaea5824a49f73d20f57d20b775c4e54b148e4"},
+        'ba': {'queryId' : 92, "secret_api_key": "bfd1973061f93ea5acb60b122a4283904e416776"}
     }
 
     aggregation = 100
     for kind, queryDescriptor in queryDescriptorList.iteritems():
         print "Processing query %d" % queryDescriptor['queryId']
         queryJSON = get_query("http://data.obudget.org", queryDescriptor['queryId'], queryDescriptor['secret_api_key'])
-        print queryJSON
         budgetData = queryJSON['query_result']['data']['rows']
         lines = []
         i = 0
         for line in budgetData:
             lines.append(json.dumps(line))
             i = i + 1
-            if (i % aggregation == 0 and len(lines) > 0):
+            if ((i % aggregation == 0 or
+                (len(budgetData) < aggregation) and i == len(budgetData)) and len(lines) > 0):
                 do_write("\n".join(lines),i,kind)
                 lines = []

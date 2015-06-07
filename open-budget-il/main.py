@@ -61,7 +61,6 @@ class Update(webapp2.RequestHandler):
 
     def post(self,what):
         self.response.headers['Content-Type'] = 'text/plain'
-
         key = self.request.get("apikey")
         user = users.get_current_user()
         if (user is None or user.email() not in ALLOWED_EMAILS) and key != UPLOAD_KEY:
