@@ -140,6 +140,7 @@ class Entity(ndb.Model):
     id = ndb.StringProperty()
     kind = ndb.StringProperty()
     name = ndb.StringProperty()
+    rank = ndb.IntegerProperty()
     creation_date = ndb.DateTimeProperty()
 
 class CompanyRecord(ndb.Model):
@@ -225,11 +226,16 @@ class TrainingFlow(ndb.Model):
     orphan = ndb.BooleanProperty()
     description	= ndb.StringProperty(indexed=False)
 
-class MRExemptionRecordHistory(ndb.Model):
-    date = ndb.DateProperty()
+class ChangeHistory(ndb.Model):
+    model = ndb.StringProperty()
+    selector = ndb.JsonProperty()
+    selector_key = ndb.StringProperty()
+    time = ndb.DateProperty()
     field = ndb.StringProperty()
     from_value = ndb.JsonProperty()
+    from_value_str = ndb.StringProperty()
     to_value = ndb.JsonProperty()
+    created = ndb.BooleanProperty()
 
 class MRExemptionRecordDocument(ndb.Model):
     update_time = ndb.DateTimeProperty()
@@ -259,8 +265,6 @@ class MRExemptionRecord(ndb.Model):
 
     url = ndb.StringProperty()
     publisher = ndb.StringProperty()
-
-    history = ndb.StructuredProperty(MRExemptionRecordHistory, repeated=True)
 
     volume = ndb.FloatProperty()
     reason = ndb.StringProperty()
