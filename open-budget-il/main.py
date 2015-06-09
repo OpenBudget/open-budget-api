@@ -22,7 +22,7 @@ from google.appengine.api import search
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
 from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation
 from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, BudgetApproval, TrainingFlow
-from models import MRExemptionRecord, MRExemptionRecordDocument, MRExemptionRecordHistory
+from models import MRExemptionRecord, MRExemptionRecordDocument, ChangeLine
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
 from upload import upload_handlers
 from xml.etree import ElementTree as et
@@ -724,6 +724,7 @@ class FTSearchApi(GenericApi):
 
     def get_query(self):
         queryString = self.get_querystr()
+        queryString = u'"%s"' % queryString.replace('"',r'\"')
         index = search.Index(name="OpenBudget")
         results = []
         try:
