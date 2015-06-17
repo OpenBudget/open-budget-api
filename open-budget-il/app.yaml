@@ -36,6 +36,8 @@ handlers:
 - url: /redirect/.*
   static_files: redirector/redirector.html
   upload: redirector
+- url: /g2/bl/(.*)
+  script: searchengine.main
 
 - url: /change_input/dist
   static_dir: change_input/dist

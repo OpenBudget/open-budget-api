@@ -724,7 +724,8 @@ class FTSearchApi(GenericApi):
 
     def get_query(self):
         queryString = self.get_querystr()
-        queryString = u'"%s"' % queryString.replace('"',r'\"')
+        queryString = queryString.split()
+        queryString = " ".join([ u'"%s"' % q.replace('"',r'\"') for q in queryString ])
         index = search.Index(name="OpenBudget")
         results = []
         try:
@@ -757,7 +758,7 @@ class FTSearchApi(GenericApi):
             # Iterate over the documents in the results
             for scored_document in resultsObject:
                 # handle results
-                resultDescriptor = {}
+                resultDescriptor = { '_rank' : scored_document.rank }
                 for field in scored_document.fields:
                     resultDescriptor[field.name] = field.value
 

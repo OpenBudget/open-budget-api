@@ -246,7 +246,7 @@ class ULBudgetApproval(UploadKind):
 class ULParticipantTimeline(UploadKind):
     KIND = "pt"
     CLS = ParticipantTimeline
-    KEY_FIELDS = [ 'kind', 'full_title', 'start_date' ]
+    KEY_FIELDS = [ 'kind', 'title', 'full_title', 'start_date' ]
 
     def preprocess_item(self,item):
         if item.get('start_date') is not None:
@@ -265,17 +265,18 @@ class ULBudgetLine(UploadKind):
     CLS = BudgetLine
     KEY_FIELDS = [ 'year', 'code' ]
     FTS_FIELDS = [
-        FTSField('code', 'TextField', False),
+        FTSField('real_code', 'TextField', False),
         FTSField('title', 'TextField', True),
         FTSField('year', 'NumberField', False),
         FTSField('net_revised', 'NumberField', False),
     ]
-    MODEL_FTS_VERSION = 1
+    MODEL_FTS_VERSION = 2
 
     def preprocess_item(self,item):
         code = item['code']
         add_prefixes(item, 'code')
         item["depth"] = len(code)/2 - 1
+        item["real_code"] = code[2:]
         return item
 
     def get_doc_rank(self,item):
@@ -353,8 +354,9 @@ class ULEntity(UploadKind):
     FTS_FIELDS = [
         FTSField('id', 'TextField', False),
         FTSField('name', 'TextField', True)
+        FTSField('kind', 'TextField', False)
     ]
-    MODEL_FTS_VERSION = 1
+    MODEL_FTS_VERSION = 3
 
     def preprocess_item(self,item):
         try:
@@ -364,7 +366,7 @@ class ULEntity(UploadKind):
         return item
 
     def get_doc_rank(self,item):
-        rank = int(item.get('rank',0))
+        rank = int(item.get('rank',0)/1000)
         return rank
 
 class ULChangeHistory(UploadKind):

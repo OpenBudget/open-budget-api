@@ -35,6 +35,7 @@ class BudgetLine(ndb.Model):
 
     group_top = ndb.StringProperty(repeated=True)
     group_full = ndb.StringProperty(repeated=True)
+    kind = ndb.StringProperty(repeated=True)
 
     prefixes = ndb.StringProperty(repeated=True)
     equiv_code = ndb.StringProperty(repeated=True)
