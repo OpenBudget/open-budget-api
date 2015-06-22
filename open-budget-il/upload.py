@@ -116,7 +116,7 @@ class UploadKind(object):
                 autocompleteFieldList = []
                 for fieldDescriptor in self.FTS_FIELDS:
                     # Obtain the field value
-                    fieldValue = getattr(dbitem, fieldDescriptor.name)
+                    fieldValue = item[fieldDescriptor.name]
                     if type(fieldValue) == list:
                         fieldValue = u" - ".join(unicode(x) for x in fieldValue)
                     if fieldDescriptor.type=='NumberField':
@@ -353,7 +353,7 @@ class ULEntity(UploadKind):
     KEY_FIELDS = [ 'id', 'kind' ]
     FTS_FIELDS = [
         FTSField('id', 'TextField', False),
-        FTSField('name', 'TextField', True)
+        FTSField('name', 'TextField', True),
         FTSField('kind', 'TextField', False)
     ]
     MODEL_FTS_VERSION = 3

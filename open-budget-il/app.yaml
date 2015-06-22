@@ -36,8 +36,6 @@ handlers:
 - url: /redirect/.*
   static_files: redirector/redirector.html
   upload: redirector
-- url: /g2/bl/(.*)
-  script: searchengine.main
 
 - url: /change_input/dist
   static_dir: change_input/dist
@@ -53,9 +51,10 @@ handlers:
   static_files: gov/\1
   upload: gov/
 
+- url: /g2/(.+)/(.*)
+  script: dynamic_page.main
 - url: /
-  static_files: webapp/main/index.html
-  upload: webapp/main/
+  script: dynamic_page.main
 - url: /(.+)
   static_files: webapp/main/\1
   upload: webapp/main/
