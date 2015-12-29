@@ -49,6 +49,19 @@ indexes:
   - name: net_allocated
     direction: desc
 
+- kind: BudgetLine
+  properties:
+  - name: active
+  - name: depth
+  - name: year
+  - name: code
+
+- kind: BudgetLine
+  properties:
+  - name: match_status.not_empty
+  - name: year
+  - name: code
+
 - kind: SupportLine
   ancestor: no
   properties:
@@ -62,6 +75,21 @@ indexes:
   - name: date
     direction: desc
   - name: year
+    direction: desc
+
+- kind: ChangeLine
+  properties:
+  - name: prefixes
+  - name: year
+  - name: req_code
+    direction: desc
+
+- kind: ChangeLine
+  properties:
+  - name: prefixes
+  - name: year
+    direction: desc
+  - name: req_code
     direction: desc
 
 - kind: ChangeLine
@@ -282,4 +310,3 @@ indexes:
   - name: model
   - name: time
     direction: desc
-    

@@ -1,5 +1,5 @@
 application: open-budget-il
-version: 2
+version: 3
 runtime: python27
 api_version: 1
 threadsafe: true
@@ -20,6 +20,12 @@ handlers:
 - url: /email/(.+)
   static_files: webapp/emaildist/\1
   upload: webapp/emaildist/
+- url: /matches/
+  static_files: webapp/matches/index.html
+  upload: webapp/matches/
+- url: /matches/(.+)
+  static_files: webapp/matches/\1
+  upload: webapp/matches/
 - url: /report/go/
   static_files: webapp/dist/index.html
   upload: webapp/dist/

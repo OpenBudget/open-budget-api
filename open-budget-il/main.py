@@ -22,9 +22,9 @@ from google.appengine.api import search
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
 from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation
 from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, BudgetApproval, TrainingFlow
-from models import MRExemptionRecord, MRExemptionRecordDocument, ChangeLine
+from models import MRExemptionRecord, MRExemptionRecordDocument, ChangeLine, CuratedBudgetMatch
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
-from upload import upload_handlers
+from upload import upload_handlers, UploadKind
 from xml.etree import ElementTree as et
 
 INFLATION = {1992: 2.338071159424868,
@@ -83,15 +83,21 @@ class Update(webapp2.RequestHandler):
         to_put = []
         to_delete = []
         doc_list = []
+        delete_doc_list = []
         handler = upload_handlers[what]
+        resp = {}
         for item in to_update:
             doc_id = handler.get_doc_id(item)
+            resp[doc_id] = {'errors':[],'diffs':{}}
             doc = index.get(doc_id)
-            items, todel, doc = handler.handle(self.response,item,doc)
+            items, todel, doc, delete_doc = handler.handle(resp[doc_id],item,doc)
             to_delete.extend(todel)
             to_put.extend(items)
             if doc != None:
-                doc_list.append(doc)
+                if not delete_doc:
+                    doc_list.append(doc)
+                else:
+                    delete_doc_list.append(doc)
 
         if len(to_put) > 0:
             ndb.put_multi(to_put)
@@ -103,8 +109,19 @@ class Update(webapp2.RequestHandler):
                 index.put( doc_list )
             except search.Error:
                 logging.exception('Put failed')
+        if len(delete_doc_list) > 0:
+            try:
+                index.delete( delete_doc_list )
+            except search.Error:
+                logging.exception('Delete failed')
 
-        self.response.write("OK %d/%d-%d\n" % (len(to_put),len(to_update),len(to_delete)))
+        resp['OK'] = True
+        resp['rcv'] = len(to_update)
+        resp['ins'] = len(to_put)
+        resp['drp'] = len(to_delete)
+        resp['doc'] = len(doc_list)
+        resp['del'] = len(delete_doc_list)
+        self.response.write(json.dumps(resp))
 
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self,o):
@@ -164,7 +181,7 @@ def get_participants(budget_code,year=None,month=None,day=None):
                     if len(photo)>0:
                         photo_url = u"/api/thumbnail/%s" % participant.name
                         photo_url = urllib.quote(photo_url.encode('utf8'))
-                        rec['photo_url'] = "http://the.open-budget.org.il" + photo_url
+                        rec['photo_url'] = "http://www.obudget.org" + photo_url
                     kind_ret.append(rec)
         kind_ret.sort(key=lambda(x):x['title'])
         ret.extend(kind_ret)
@@ -180,6 +197,9 @@ class GenericApi(webapp2.RequestHandler):
         self.response.headers['Access-Control-Allow-Credentials'] = 'true'
 
     def do_paging(self):
+        return True
+
+    def should_cache(self,*args,**kw):
         return True
 
     def getDocumentation(self,kind):
@@ -210,7 +230,8 @@ class GenericApi(webapp2.RequestHandler):
 
         data = None
         key = self.key(*args,**kw)
-        if key is not None and self.request.get("no-cache") != "true":
+        should_cache = self.should_cache(*args,**kw) and self.request.get("no-cache") != "true"
+        if key is not None and should_cache:
             key = key + "//%s/%s/%s" % (self.first,self.limit,self.output_format)
             data = memcache.get(key)
 
@@ -221,9 +242,9 @@ class GenericApi(webapp2.RequestHandler):
             query = self.get_query(*args,**kw)
             if isinstance(query,ndb.Query):
                 if self.do_paging():
-                    ret = [ x.to_dict() for x in query.fetch(batch_size=self.first+self.limit,limit=self.limit,offset=self.first) ]
+                    ret = [ x.to_dict() for x in query.fetch(batch_size=self.first+self.limit,limit=self.limit,offset=self.first,use_cache=should_cache) ]
                 else:
-                    ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit) ]
+                    ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit,use_cache=should_cache) ]
             else:
                 ret = query
             if self.output_format == 'json':
@@ -238,7 +259,10 @@ class GenericApi(webapp2.RequestHandler):
             elif self.output_format == 'xls':
                 ret = XLSEncode(ret, self.getDocumentation(query.kind))
             if key is not None:
-                memcache.add(key, ret.encode("zip"), 86400)
+                try:
+                    memcache.add(key, ret.encode("zip"), 86400)
+                except Exception, e:
+                    logging.exception('Failed to save key to memcache %s' % key)
 
         if self.output_format == 'json':
             callback = self.request.get('callback')
@@ -254,7 +278,10 @@ class GenericApi(webapp2.RequestHandler):
             self.response.headers['Content-Type'] = 'application/vnd.ms-excel'
             self.response.headers['Content-Disposition'] = 'attachment; filename=export.csv'
 
-        self.response.headers['cache-control'] = 'public, max-age=600'
+        if should_cache:
+            self.response.headers['cache-control'] = 'public, max-age=600'
+        else:
+            self.response.headers['cache-control'] = 'private, max-age=0, no-cache'
         self.response.write(ret)
 
 aggregated_budget_fields = set(k for k,v in BudgetLine.__dict__.iteritems()
@@ -267,6 +294,9 @@ class BudgetApi(GenericApi):
     def key(self,code,year=None,kind=None,extra=None):
         return "BudgetApi:%s/%s/%s/%s" % (code,year,kind,extra)
 
+    def should_cache(self,code,year=None,kind=None,extra=None):
+        return not (kind == 'matches' and code != '00')
+
     def get_query(self,code,year=None,kind=None,extra=None):
         if year != None:
             year = int(year)
@@ -275,6 +305,8 @@ class BudgetApi(GenericApi):
                 self.single = True
             elif kind == "kids":
                 lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.depth==len(code)/2,BudgetLine.year==year)
+            elif kind == "active-kids":
+                lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.depth==len(code)/2,BudgetLine.year==year,BudgetLine.active==True)
             elif kind == "parents":
                 parent_codes = [ code[:x] for x in range(2,len(code)+1,2) ]
                 lines = BudgetLine.query(BudgetLine.code.IN(parent_codes),BudgetLine.year==year)
@@ -282,7 +314,7 @@ class BudgetApi(GenericApi):
                 depth = int(extra)
                 lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.depth==depth,BudgetLine.year==year)
             elif kind == "equivs":
-                equiv_code = "E%s/%s" % (year,code)
+                equiv_code = "%s/%s" % (year,code)
                 _lines = BudgetLine.query(BudgetLine.equiv_code==equiv_code).order(BudgetLine.year).fetch(batch_size=50)
                 lines = []
                 by_year = itertools.groupby(_lines, lambda x:x.year)
@@ -300,6 +332,8 @@ class BudgetApi(GenericApi):
                         rec['orig_codes'].append(item.code)
                     base.update(rec)
                     lines.append(base)
+            elif kind == "matches":
+                lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.year==year,BudgetLine.match_status.not_empty==True)
         else:
             lines = BudgetLine.query(BudgetLine.code==code).order(BudgetLine.year)
         return lines
@@ -328,13 +362,13 @@ class ChangesApi(GenericApi):
         if year is not None:
             year = int(year)
             if code is not None:
-                lines = ChangeLine.query(ChangeLine.prefixes==code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
+                lines = ChangeLine.query(ChangeLine.prefixes==code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.req_code)
             else:
                 leading_item = int(leading_item)
                 req_code = int(req_code)
                 lines = ChangeLine.query(ChangeLine.leading_item==leading_item,ChangeLine.req_code==req_code,ChangeLine.year==year).order(-ChangeLine.year,-ChangeLine.date)
         else:
-            lines = ChangeLine.query(ChangeLine.prefixes==code).order(-ChangeLine.year,-ChangeLine.date)
+            lines = ChangeLine.query(ChangeLine.prefixes==code).order(-ChangeLine.year,-ChangeLine.req_code)
         return lines
 
 class ChangeGroupApi(GenericApi):
@@ -359,7 +393,7 @@ class ChangeGroupApi(GenericApi):
             year = int(year)
             if code is not None:
                 if equivs is not None:
-                    equiv_code = "E%s/%s" % (year,code)
+                    equiv_code = "%s/%s" % (year,code)
                     lines = ChangeGroup.query(ChangeGroup.equiv_code==equiv_code).order(-ChangeGroup.date)
                 else:
                     lines = ChangeGroup.query(ChangeGroup.prefixes==code,ChangeGroup.year==year).order(-ChangeGroup.date)
@@ -420,6 +454,10 @@ class ExemptionsApi(GenericApi):
             publication_id = int(publication_id)
             lines = MRExemptionRecord.query(MRExemptionRecord.publication_id==publication_id)
             self.single = True
+        elif kind=='entity':
+            entity_id = args[1]
+            lines = MRExemptionRecord.query(MRExemptionRecord.entity_id==entity_id)
+            self.single = True
         elif kind=='budget':
             budget_code = args[1]
             lines = MRExemptionRecord.query(MRExemptionRecord.prefixes==budget_code)
@@ -428,7 +466,13 @@ class ExemptionsApi(GenericApi):
             date_to = datetime.date(int(args[4]),int(args[5]),int(args[6]))
             lines = MRExemptionRecord.query(MRExemptionRecord.last_update_date >= date_from, MRExemptionRecord.last_update_date <= date_to)
         elif kind=='new':
-            lines = MRExemptionRecord.query().order(-MRExemptionRecord.last_update_date)
+            if len(args)>1:
+                days = int(args[1])
+                first_date = datetime.datetime.now() - datetime.timedelta(days=days+1)
+                lines = MRExemptionRecord.query(MRExemptionRecord.last_update_date>first_date)\
+                                         .order(-MRExemptionRecord.last_update_date)
+            else:
+                lines = MRExemptionRecord.query().order(-MRExemptionRecord.last_update_date)
 
         return lines
 
@@ -523,6 +567,9 @@ class SupportsApi(GenericApi):
                 lines = SupportLine.query(SupportLine.year==year,SupportLine.recipient.IN(recipients)).order(SupportLine.code,SupportLine.kind,SupportLine.year)
             else:
                 lines = SupportLine.query(SupportLine.recipient.IN(recipients)).order(SupportLine.code,SupportLine.kind,SupportLine.year)
+        elif args[0] == 'entity':
+            entity = args[1].decode('utf8')
+            lines = SupportLine.query(SupportLine.entity_id==entity).order(-SupportLine.year)
         elif args[0] == 'kind':
             #logging.error('SupportsApi:kind args=%r' % (args,))
             kind = args[1]
@@ -744,6 +791,11 @@ class FTSearchApi(GenericApi):
                 searchQueryString = "%s AND (%s)"%(queryString, " OR ".join(searchQueryStringList))
             else:
                 searchQueryString = queryString
+            types = self.request.get('types')
+            if types is not None and types.strip() != '':
+                types = types.split(',')
+                searchQueryString += ' (%s)' % ' OR '.join('(type=%s)' % t for t in types)
+            searchQueryString += " AND (%s >= %s)" % (UploadKind.VERSION_FIELD_NAME, UploadKind.FTS_VERSION)
 
             searchQuery = search.Query(query_string=searchQueryString)
             try:
@@ -758,7 +810,8 @@ class FTSearchApi(GenericApi):
             # Iterate over the documents in the results
             for scored_document in resultsObject:
                 # handle results
-                resultDescriptor = { '_rank' : scored_document.rank }
+                resultDescriptor = { '_rank' : scored_document.rank,
+                                     '_id'   : scored_document.doc_id }
                 for field in scored_document.fields:
                     resultDescriptor[field.name] = field.value
 
@@ -784,12 +837,12 @@ class PendingChangesRss(webapp2.RequestHandler):
         for i in rss_item_ids:
             item = SystemProperty.query(SystemProperty.key=='rss_items[%s]' % i).fetch(1)[0]
             item = item.value
-            item['baseurl']='http://the.open-budget.org.il/static/email/'
+            item['baseurl']='http://www.obudget.org/static/email/'
             item['pubdate']=last_mod.isoformat()
             rss_items.append(item)
         rss_items = [ { 'title': item['title'],
                         'description': item_template.render(item),
-                        'link': "http://the.open-budget.org.il/stg/#transfer/%s/%s" % (item['group_id'],item['group'][0][0]),
+                        'link': "http://www.obudget.org/stg/#transfer/%s/%s" % (item['group_id'],item['group'][0][0]),
                         'score': item['score'],
                         'pubdate': item['pubdate'] } for item in rss_items ]
         to_render = { 'title': rss_title,
@@ -948,6 +1001,71 @@ class Report(webapp2.RequestHandler):
             ret = "%s(%s);" % ( callback, ret )
         self.response.write(ret)
 
+class BudgetMatches(webapp2.RequestHandler):
+
+    def _set_response_headers(self):
+        self.response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        self.response.headers['Access-Control-Allow-Origin'] = "*"
+        self.response.headers['Access-Control-Max-Age'] = '604800'
+        self.response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, If-Match, If-Modified-Since, If-None-Match, If-Unmodified-Since, X-Requested-With, Cookie'
+        self.response.headers['Access-Control-Allow-Credentials'] = 'true'
+
+    def options(self):
+        self._set_response_headers()
+
+    def get(self):
+        curatedAll = CuratedBudgetMatch.query().order(-CuratedBudgetMatch.creation_time)
+        ret = {}
+        i = 0
+        for curated in curatedAll:
+            key = (curated.year,curated.code)
+            logging.info('%d: %r -> %r (%s)' % (i, key,curated.curated,curated.email))
+            if key not in ret:
+                ret[key] = zip([curated.year-1]*len(curated.curated),curated.curated)
+            i += 1
+        ret = list(ret.iteritems())
+        self.response.write(json.dumps(ret))
+
+    def post(self):
+        self._set_response_headers()
+        resp = {'OK':False}
+        user = users.get_current_user()
+        if user:
+            resp['username'] = user.nickname()
+            resp['url'] = users.create_logout_url('/matches/')
+
+            # check if we are in a production or localhost environment
+            if ("localhost" in self.request.host):
+                # on a localhost the body needs to be unquoted
+                body = urllib.unquote_plus(self.request.body)
+            else:
+                body = self.request.body
+            body = body.strip("=")
+
+            item = json.loads(body)
+            if item is not None and len(item)>0:
+                year = item['year']
+                code = item['code']
+                curatedCodes = [c['code'] for c in item['curated']]
+                curated = CuratedBudgetMatch(code=code,year=year,curated=curatedCodes,email=user.email())
+                curated.put()
+                budgetItem = BudgetLine.query(BudgetLine.code==code,BudgetLine.year==year).fetch(1)
+                if len(budgetItem)>0:
+                    budgetItem = budgetItem[0]
+                    currentCurated = budgetItem.match_status.curated
+                    if currentCurated is None or set(curatedCodes) != set(currentCurated):
+                        budgetItem.match_status.curated = curatedCodes
+                        budgetItem.match_status.missing = False
+                        budgetItem.match_status.pending = user.nickname()
+                        budgetItem.put()
+                resp['OK'] = True
+        else:
+            resp['username'] = None
+            resp['url'] = users.create_login_url('/matches/')
+
+        self.response.write(json.dumps(resp))
+
+
 api = webapp2.WSGIApplication([
     ('/api/budget/([0-9]+)/approvals', BudgetApprovalsApi),
 
@@ -955,7 +1073,9 @@ api = webapp2.WSGIApplication([
     ('/api/budget/([0-9]+)/([0-9]+)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(equivs)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(kids)', BudgetApi),
+    ('/api/budget/([0-9]+)/([0-9]+)/(active-kids)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(parents)', BudgetApi),
+    ('/api/budget/([0-9]+)/([0-9]+)/(matches)', BudgetApi),
     ('/api/budget/([0-9]+)/([0-9]+)/(depth)/([0-9]+)', BudgetApi),
     ('/api/changes/([0-9]+)', ChangesApi),
     ('/api/changes/pending/(all)', ChangesPendingApi),
@@ -977,12 +1097,15 @@ api = webapp2.WSGIApplication([
     ('/api/supports/(kind)/([a-z]+)/([0-9]+)/([0-9]+)/(aggregated)', SupportsApi),
     ('/api/supports/(recipient)/([^/]+)/([0-9]+)', SupportsApi),
     ('/api/supports/(recipient)/(.+)', SupportsApi),
+    ('/api/supports/(entity)/(.+)', SupportsApi),
     ('/api/supports/([0-9]+)', SupportsApi),
     ('/api/supports/([0-9]+)/([0-9]+)', SupportsApi),
 
     ('/api/exemption/(publication)/([0-9]+)', ExemptionsApi),
     ('/api/exemption/(budget)/([0-9]+)', ExemptionsApi),
+    ('/api/exemption/(entity)/([0-9]+)', ExemptionsApi),
     ('/api/exemption/(new)', ExemptionsApi),
+    ('/api/exemption/(new)/([0-9]+)', ExemptionsApi),
     ('/api/exemption/(updated)/([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])/([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9])', ExemptionsApi),
     ('/api/exemption/document', ExemptionsDocumentsApi),
 
@@ -1003,6 +1126,9 @@ api = webapp2.WSGIApplication([
     ('/api/sysprop/(.+)', SystemPropertyApi),
     ('/api/pdf/([^/]+)', PdfStatusApi),
     ('/api/update/([a-z]+)', Update),
+
+    ('/api/budget-matches', BudgetMatches),
+
     ('/rss/changes/pending', PendingChangesRss)
 ], debug=True)
 

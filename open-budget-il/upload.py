@@ -4,13 +4,14 @@ import logging
 import datetime
 import re
 import json
+import types
 
 from collections import namedtuple
 
 from google.appengine.api import search
 
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
-from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation
+from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation, MatchStatus
 from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, BudgetApproval, TrainingFlow
 from models import MRExemptionRecord, MRExemptionRecordDocument, ChangeHistory
 
@@ -23,6 +24,12 @@ def add_prefixes(item,code_field):
 
 FTSField = namedtuple('FTSField', 'name type autocomplete')
 
+__primitives = {str, unicode, int, float, bool, types.NoneType, long}
+def fmt(obj):
+    if type(obj) in __primitives:
+        return obj
+    return repr(obj)
+
 class UploadKind(object):
     FTS_FIELDS = []
     FTS_VERSION = 2
@@ -31,7 +38,7 @@ class UploadKind(object):
     TOKENS_FIELD_NAME = 'tokens_auto'
 
     @staticmethod
-    def mysetattr(response,i,k,v):
+    def mysetattr(status,i,k,v):
         # verify that the key exists in the model
         # there can be discreptancies
         if hasattr(i, k):
@@ -42,10 +49,10 @@ class UploadKind(object):
                     v.sort()
                     if len(v) != len(orig_v) or any(x!=y for x,y in zip(v,orig_v)):
                         i.__setattr__(k,v)
-                        response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
+                        status['diffs'][k]=[fmt(orig_v),fmt(v)]
                 except ValueError:
                     i.__setattr__(k,v)
-                    response.write("%s: %s: list != new list\n" % (i.key,k))
+                    status['diffs'][k]=[fmt(orig_v),fmt(v)]
                 return True
             else:
                 if orig_v != v:
@@ -58,14 +65,17 @@ class UploadKind(object):
                         if (type(orig_v) is int):
                             v = 0
                     i.__setattr__(k,v)
-                    response.write("%s: %s: %r != %r\n" % (i.key, k,orig_v,v))
+                    status['diffs'][k]=[fmt(orig_v),fmt(v)]
                     return True
         return False
 
     def preprocess_item(self,item):
         return item
 
-    def handle(self, response, item, current_doc):
+    def should_index(self,item):
+        return True
+
+    def handle(self, status, item, current_doc):
         to_delete = []
         item = self.preprocess_item(item)
         vals = [item[f] for f in self.KEY_FIELDS]
@@ -77,7 +87,7 @@ class UploadKind(object):
         classname = self.CLS.__name__
         if len(dbitem) == 0:
             item['_cls'] = classname
-            response.write("No {0} for {1}".format(classname,
+            status['errors'].append("No {0} for {1}".format(classname,
                                                     " ".join("{0}".format(x) for x in key_args)))
             dbitem = self.CLS()
         else:
@@ -89,12 +99,13 @@ class UploadKind(object):
         dirty = False
         dirty_fields = set()
         for k,v in item.iteritems():
-            field_dirty = self.mysetattr(response,dbitem,k,v)
+            field_dirty = self.mysetattr(status,dbitem,k,v)
             if field_dirty:
                 dirty = True
                 dirty_fields.add(k)
 
         doc = None
+        delete_doc = False
         # Update the document if the dirty_fields contain any of the FTS_FIELDS
         fts_field_names = map(lambda x: x.name, self.FTS_FIELDS)
         dirty_fts_fields = set(fts_field_names).intersection(dirty_fields)
@@ -108,54 +119,61 @@ class UploadKind(object):
                 current_doc[self.VERSION_FIELD_NAME] is None or \
                 current_doc[self.VERSION_FIELD_NAME] < current_version:
 
-                doc_id = self.get_doc_id(item)
-                #logging.debug('doc_id=%s' % doc_id)
-                fieldList = [search.TextField(name="type", value=classname),
-                             search.NumberField(name=self.VERSION_FIELD_NAME, value=current_version)]
-                # Iterate over the FTS_FIELDS and build the field descriptor list
-                autocompleteFieldList = []
-                for fieldDescriptor in self.FTS_FIELDS:
-                    # Obtain the field value
-                    fieldValue = item[fieldDescriptor.name]
-                    if type(fieldValue) == list:
-                        fieldValue = u" - ".join(unicode(x) for x in fieldValue)
-                    if fieldDescriptor.type=='NumberField':
-                        try:
-                            fieldValue = int(fieldValue)
-                        except:
-                            fieldValue = 0
+                if self.should_index(item):
+                    doc_id = self.get_doc_id(item)
+                    #logging.debug('doc_id=%s' % doc_id)
+                    fieldList = [search.TextField(name="type", value=classname),
+                                 search.NumberField(name=self.VERSION_FIELD_NAME, value=current_version)]
+                    # Iterate over the FTS_FIELDS and build the field descriptor list
+                    autocompleteFieldList = []
+                    for fieldDescriptor in self.FTS_FIELDS:
+                        # Obtain the field value
+                        fieldValue = item.get(fieldDescriptor.name)
+                        if fieldValue is None:
+                            continue
 
-                    # Check if the field should be tokenized for autocomplete
-                    if fieldDescriptor.autocomplete == True:
-                        autocompleteFieldList.append(fieldValue)
+                        if type(fieldValue) == list:
+                            fieldValue = u" - ".join(unicode(x) for x in fieldValue)
+                        if fieldDescriptor.type=='NumberField':
+                            try:
+                                fieldValue = int(fieldValue)
+                            except:
+                                fieldValue = 0
 
-                    # Build the GAE field object
-                    field = getattr(search, fieldDescriptor.type)(
-                        name=fieldDescriptor.name,
-                        value=fieldValue)
-                    # Store the field object so it can be used in the GAE document
-                    # object
-                    fieldList.append(field)
+                        # Check if the field should be tokenized for autocomplete
+                        if fieldDescriptor.autocomplete == True:
+                            autocompleteFieldList.append(fieldValue)
 
-                # Tokenize the search terms for automcomplete
-                tokens = set()
-                for fieldValue in autocompleteFieldList:
-                    tokens.update(self.get_tokens(fieldValue))
-                # Create a token field if there are tokens
-                if len(tokens)>0:
-                    #logging.debug(u'tokenized -> %r' % (tokens))
-                    fieldList.append(search.TextField(name=self.TOKENS_FIELD_NAME,value=" ".join(tokens)))
+                        # Build the GAE field object
+                        field = getattr(search, fieldDescriptor.type)(
+                            name=fieldDescriptor.name,
+                            value=fieldValue)
+                        # Store the field object so it can be used in the GAE document
+                        # object
+                        fieldList.append(field)
 
-                logging.debug('fieldList=%r, docid=%r' % (fieldList,doc_id))
-                # Create a new document
-                doc = search.Document(
-                    doc_id = doc_id,
-                    fields = fieldList,
-                    rank = self.get_doc_rank(item))
+                    # Tokenize the search terms for automcomplete
+                    tokens = set()
+                    for fieldValue in autocompleteFieldList:
+                        tokens.update(self.get_tokens(fieldValue))
+                    # Create a token field if there are tokens
+                    if len(tokens)>0:
+                        #logging.debug(u'tokenized -> %r' % (tokens))
+                        fieldList.append(search.TextField(name=self.TOKENS_FIELD_NAME,value=" ".join(tokens)))
+
+                    logging.debug('fieldList=%r, docid=%r' % (fieldList,doc_id))
+                    # Create a new document
+                    doc = search.Document(
+                        doc_id = doc_id,
+                        fields = fieldList,
+                        rank = self.get_doc_rank(item))
+                else:
+                    doc = current_doc
+                    delete_doc = True
 
         if not dirty:
             dbitems = []
-        return dbitems, to_delete, doc
+        return dbitems, to_delete, doc, delete_doc
 
     def get_doc_id(self,item):
         # Build a unique document ID
@@ -270,13 +288,18 @@ class ULBudgetLine(UploadKind):
         FTSField('year', 'NumberField', False),
         FTSField('net_revised', 'NumberField', False),
     ]
-    MODEL_FTS_VERSION = 2
+    MODEL_FTS_VERSION = 3
 
     def preprocess_item(self,item):
         code = item['code']
         add_prefixes(item, 'code')
         item["depth"] = len(code)/2 - 1
         item["real_code"] = code[2:]
+
+        match_status = item.get('match_status',{})
+        match_status = MatchStatus(**match_status)
+        item['match_status'] = match_status
+
         return item
 
     def get_doc_rank(self,item):
@@ -286,13 +309,16 @@ class ULBudgetLine(UploadKind):
         rank = max(item.get('net_revised',0),0)
         return rank
 
+    def should_index(self,item):
+        return item['year'] <= 2014
+
 class ULChangeLine(UploadKind):
     KIND = "cl"
     CLS = ChangeLine
     KEY_FIELDS = [ 'year', 'leading_item', 'req_code', 'budget_code' ]
 
     def preprocess_item(self,item):
-        add_prefixes(item,'code')
+        add_prefixes(item,'budget_code')
         if item.get('date') is not None and item['date'] != "":
             try:
                 item['date'] = datetime.datetime.strptime(item['date'],'%d/%m/%Y')
@@ -469,6 +495,7 @@ upload_handlers = [
     ULBudgetLine,
     ULChangeLine,
     ULChangeGroup,
+    ULChangeExplanation,
     ULSearchHelper,
     ULEntity,
     ULCompanyRecord,

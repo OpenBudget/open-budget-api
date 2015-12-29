@@ -6,6 +6,16 @@ class SystemProperty(ndb.Model):
     value = ndb.JsonProperty(indexed=False)
     last_modified = ndb.DateTimeProperty(auto_now=True)
 
+class MatchStatus(ndb.Model):
+    """Budget matching status"""
+    missing = ndb.BooleanProperty(default=False)
+    invalid = ndb.StringProperty(repeated=True)
+    curated = ndb.StringProperty(repeated=True)
+    heuristic = ndb.StringProperty(repeated=True)
+    skipped = ndb.BooleanProperty(default=False)
+    pending = ndb.StringProperty(default="")
+    not_empty = ndb.ComputedProperty(lambda x: not x.skipped and (x.missing or len(x.invalid)>0 or len(x.curated)>0 or len(x.heuristic)>0))
+
 class BudgetLine(ndb.Model):
     """Single budget line"""
     code = ndb.StringProperty()
@@ -30,18 +40,27 @@ class BudgetLine(ndb.Model):
     contractors_revised = ndb.FloatProperty()
     amounts_revised = ndb.IntegerProperty()
 
-    net_used = ndb.IntegerProperty()
+    net_used = ndb.FloatProperty()
     gross_used = ndb.IntegerProperty()
 
     group_top = ndb.StringProperty(repeated=True)
     group_full = ndb.StringProperty(repeated=True)
+
+    class_top = ndb.StringProperty(repeated=True)
+    class_full = ndb.StringProperty(repeated=True)
+
     kind = ndb.StringProperty(repeated=True)
+    subkind = ndb.StringProperty(repeated=True)
 
     prefixes = ndb.StringProperty(repeated=True)
     equiv_code = ndb.StringProperty(repeated=True)
     depth = ndb.IntegerProperty()
 
     explanation = ndb.TextProperty(indexed=False)
+
+    active = ndb.BooleanProperty()
+
+    match_status = ndb.StructuredProperty(MatchStatus)
 
     analysis_short_term_yearly_change = ndb.IntegerProperty()
 
@@ -143,6 +162,7 @@ class Entity(ndb.Model):
     name = ndb.StringProperty()
     rank = ndb.IntegerProperty()
     creation_date = ndb.DateTimeProperty()
+    flags = ndb.JsonProperty()
 
 class CompanyRecord(ndb.Model):
     """A single company record"""
@@ -275,4 +295,13 @@ class MRExemptionRecord(ndb.Model):
     entity_id = ndb.StringProperty()
     entity_kind = ndb.StringProperty()
 
+    flags = ndb.JsonProperty()
+
     last_modified = ndb.DateTimeProperty(auto_now=True)
+
+class CuratedBudgetMatch(ndb.Model):
+    code = ndb.StringProperty()
+    year = ndb.IntegerProperty()
+    curated = ndb.StringProperty(repeated=True)
+    email = ndb.StringProperty()
+    creation_time = ndb.DateTimeProperty(auto_now_add=True)
