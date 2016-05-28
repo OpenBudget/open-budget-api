@@ -13,7 +13,7 @@ from google.appengine.api import search
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
 from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation, MatchStatus
 from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, BudgetApproval, TrainingFlow
-from models import MRExemptionRecord, MRExemptionRecordDocument, ChangeHistory
+from models import MRExemptionRecord, MRExemptionRecordDocument, ChangeHistory, ProcurementLine
 
 def add_prefixes(item,code_field):
     code = item.get(code_field)
@@ -288,7 +288,7 @@ class ULBudgetLine(UploadKind):
         FTSField('year', 'NumberField', False),
         FTSField('net_revised', 'NumberField', False),
     ]
-    MODEL_FTS_VERSION = 3
+    MODEL_FTS_VERSION = 4
 
     def preprocess_item(self,item):
         code = item['code']
@@ -310,7 +310,7 @@ class ULBudgetLine(UploadKind):
         return rank
 
     def should_index(self,item):
-        return item['year'] <= 2014
+        return item['year'] <= 2016
 
 class ULChangeLine(UploadKind):
     KIND = "cl"
@@ -415,6 +415,18 @@ class ULNGORecord(UploadKind):
     CLS = NGORecord
     KEY_FIELDS = [ 'amuta_id' ]
 
+class ULProcurementLine(UploadKind):
+    KIND = "pl"
+    CLS = ProcurementLine
+    KEY_FIELDS = [ 'report_date', 'order_id', 'budget_code' ]
+    MODEL_FTS_VERSION = 2
+
+    def preprocess_item(self,item):
+        add_prefixes(item,'budget_code')
+        if item.get('order_date') is not None and item['order_date'] != "":
+            item['order_date'] = datetime.datetime.strptime(item['order_date'],'%d/%m/%Y').date()
+        return item
+
 class ULMRExemptionRecord(UploadKind):
     KIND = "mr"
     CLS = MRExemptionRecord
@@ -502,7 +514,8 @@ upload_handlers = [
     ULNGORecord,
     ULMRExemptionRecord,
     ULSupportLine,
-    ULChangeHistory
+    ULChangeHistory,
+    ULProcurementLine
 ]
 
 upload_handlers = { x.KIND: x() for x in upload_handlers }

@@ -12,6 +12,7 @@ import csv
 import StringIO
 import itertools
 import urllib2
+from zipfile import ZipFile
 
 from google.appengine.api import memcache
 from google.appengine.ext import ndb
@@ -22,7 +23,7 @@ from google.appengine.api import search
 from models import BudgetLine, SupportLine, ChangeLine, SearchHelper, PreCommitteePage, Entity
 from models import ChangeExplanation, SystemProperty, ChangeGroup, CompanyRecord, NGORecord, ModelDocumentation
 from models import ParticipantMapping, ParticipantTimeline, ParticipantPhoto, BudgetApproval, TrainingFlow
-from models import MRExemptionRecord, MRExemptionRecordDocument, ChangeLine, CuratedBudgetMatch
+from models import MRExemptionRecord, MRExemptionRecordDocument, ChangeLine, CuratedBudgetMatch, ProcurementLine
 from secret import ALLOWED_EMAILS, UPLOAD_KEY
 from upload import upload_handlers, UploadKind
 from xml.etree import ElementTree as et
@@ -97,7 +98,7 @@ class Update(webapp2.RequestHandler):
                 if not delete_doc:
                     doc_list.append(doc)
                 else:
-                    delete_doc_list.append(doc)
+                    delete_doc_list.append(doc_id)
 
         if len(to_put) > 0:
             ndb.put_multi(to_put)
@@ -260,7 +261,7 @@ class GenericApi(webapp2.RequestHandler):
                 ret = XLSEncode(ret, self.getDocumentation(query.kind))
             if key is not None:
                 try:
-                    memcache.add(key, ret.encode("zip"), 86400)
+                    memcache.add(key, ret.encode("zip"), 3600)
                 except Exception, e:
                     logging.exception('Failed to save key to memcache %s' % key)
 
@@ -279,7 +280,7 @@ class GenericApi(webapp2.RequestHandler):
             self.response.headers['Content-Disposition'] = 'attachment; filename=export.csv'
 
         if should_cache:
-            self.response.headers['cache-control'] = 'public, max-age=600'
+            self.response.headers['cache-control'] = 'public, max-age=1200'
         else:
             self.response.headers['cache-control'] = 'private, max-age=0, no-cache'
         self.response.write(ret)
@@ -315,11 +316,11 @@ class BudgetApi(GenericApi):
                 lines = BudgetLine.query(code_starts_with(BudgetLine,code),BudgetLine.depth==depth,BudgetLine.year==year)
             elif kind == "equivs":
                 equiv_code = "%s/%s" % (year,code)
-                _lines = BudgetLine.query(BudgetLine.equiv_code==equiv_code).order(BudgetLine.year).fetch(batch_size=50)
+                _lines = BudgetLine.query(ndb.OR(ndb.AND(BudgetLine.year==year,BudgetLine.code==code),BudgetLine.equiv_code==equiv_code)).order(BudgetLine.year).fetch(batch_size=50)
                 lines = []
                 by_year = itertools.groupby(_lines, lambda x:x.year)
-                for year, yearly in by_year:
-                    rec = { 'year': year,
+                for _year, yearly in by_year:
+                    rec = { 'year': _year,
                             'code': code,
                             'title': _lines[-1].title,
                             'orig_codes':[] }
@@ -493,6 +494,8 @@ class ExemptionsDocumentsApi(webapp2.RequestHandler):
             name, ret = self.transparent(url)
         else:
             name, ret = self.decode(url)
+        ext = name.split('.')[-1]
+        name = 'document.'+ext
 
         self.response.headers['Content-Disposition'] = 'attachment; filename=' + name
         self.response.write(ret)
@@ -503,9 +506,19 @@ class ExemptionsDocumentsApi(webapp2.RequestHandler):
         return url.split('/')[-1].encode("ascii", "ignore"), ret
 
     def decode(self, url):
-        response = urllib2.urlopen(url)
+        response = urllib2.urlopen(url).read()
 
-        doc = et.parse(response)
+        if response.startswith('PK'):
+            print "ZIPFILE"
+            zf = ZipFile(StringIO.StringIO(response))
+            for zi in zf.filelist:
+                if zi.filename.endswith('xml'):
+                    continue
+                filename = zi.filename.split('/')[-1]
+                print repr(zi.filename)
+                return filename, zf.read(zi)
+
+        doc = et.fromstring(response)
 
         # Get rid of the goddamn namespaces.
         namespace_re = re.compile(r'\{.*\}')
@@ -600,6 +613,18 @@ class SupportsApi(GenericApi):
             else:
                 lines = SupportLine.query(SupportLine.prefixes==code).order(SupportLine.recipient,SupportLine.kind,SupportLine.year)
         return lines
+
+
+class ProcurementApi(GenericApi):
+
+    def key(self,*args):
+        return "ProcurementApi:%s" % "/".join([str(a) for a in args])
+
+    def get_query(self,*args):
+        if args[0] == 'entity':
+            return ProcurementLine.query(ProcurementLine.entity_id==args[1])
+        else:
+            return ProcurementLine.query(ProcurementLine.prefixes==args[0])
 
 class SystemPropertyApi(GenericApi):
 
@@ -1100,6 +1125,9 @@ api = webapp2.WSGIApplication([
     ('/api/supports/(entity)/(.+)', SupportsApi),
     ('/api/supports/([0-9]+)', SupportsApi),
     ('/api/supports/([0-9]+)/([0-9]+)', SupportsApi),
+
+    ('/api/procurement/(entity)/(.+)', ProcurementApi),
+    ('/api/procurement/([0-9]+)', ProcurementApi),
 
     ('/api/exemption/(publication)/([0-9]+)', ExemptionsApi),
     ('/api/exemption/(budget)/([0-9]+)', ExemptionsApi),

@@ -292,6 +292,9 @@ class MRExemptionRecord(ndb.Model):
     decision = ndb.StringProperty()
     description = ndb.StringProperty(indexed=False)
 
+    source_currency = ndb.StringProperty()
+    page_title = ndb.StringProperty()
+
     entity_id = ndb.StringProperty()
     entity_kind = ndb.StringProperty()
 
@@ -305,3 +308,32 @@ class CuratedBudgetMatch(ndb.Model):
     curated = ndb.StringProperty(repeated=True)
     email = ndb.StringProperty()
     creation_time = ndb.DateTimeProperty(auto_now_add=True)
+
+class ProcurementLine(ndb.Model):
+    publisher = ndb.StringProperty()
+    purchasing_unit = ndb.StringProperty()
+    buyer_description = ndb.StringProperty()
+    budget_code = ndb.StringProperty()
+    budget_title = ndb.StringProperty()
+    supplier_code = ndb.StringProperty()
+    supplier_name = ndb.StringProperty()
+    volume = ndb.FloatProperty()
+    executed = ndb.FloatProperty()
+    currency = ndb.StringProperty()
+    purchase_method = ndb.StringProperty()
+    manof_ref = ndb.StringProperty()
+    exemption_reason = ndb.StringProperty()
+    purpose = ndb.StringProperty()
+    order_id = ndb.StringProperty()
+    sensitive_order = ndb.BooleanProperty()
+    report_date = ndb.StringProperty()
+    report_title = ndb.StringProperty()
+    report_publisher = ndb.StringProperty()
+    report_year = ndb.IntegerProperty()
+    report_period = ndb.IntegerProperty()
+    report_error = ndb.StringProperty()
+    order_date = ndb.DateProperty()
+    entity_id = ndb.StringProperty()
+    entity_kind = ndb.StringProperty()
+
+    prefixes = ndb.StringProperty(repeated=True)
