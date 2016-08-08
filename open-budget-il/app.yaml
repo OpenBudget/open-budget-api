@@ -1,5 +1,5 @@
-application: open-budget-il
-version: 3
+# application: open-budget-il
+# version: staging
 runtime: python27
 api_version: 1
 threadsafe: true
@@ -61,9 +61,8 @@ handlers:
   script: dynamic_page.main
 - url: /
   script: dynamic_page.main
-- url: /(.+)
-  static_files: webapp/main/\1
-  upload: webapp/main/
+- url: /
+  static_dir: webapp/main
 
 builtins:
 - remote_api: on

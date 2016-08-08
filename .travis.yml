@@ -1,0 +1,32 @@
+language: node_js
+cache:
+  directories:
+  - webapp/
+node_js:
+- stable
+before_install:
+- openssl aes-256-cbc -K $encrypted_e30e44343c10_key -iv $encrypted_e30e44343c10_iv -in ./open-budget-il/obudget-dev-bnaya-308347e8b708.json.enc -out ./open-budget-il/obudget-dev-bnaya-308347e8b708.json -d
+- npm install -g grunt-cli
+- git submodule init
+- cd webapp
+- git checkout master -f
+- git pull origin master
+- cd open-budget
+install:
+- npm install
+- bower update
+script: 
+- grunt eslint
+- grunt build 
+- cd ../../open-budget-il 
+- pwd
+- ls webapp/main
+
+deploy:
+  provider: gae
+  keyfile: obudget-dev-bnaya-308347e8b708.json
+  project: obudget-dev-bnaya
+  version: staging
+  no_promote: true
+  on: 
+    branch: travis-deploy
