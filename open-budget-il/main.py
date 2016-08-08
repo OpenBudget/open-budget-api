@@ -203,7 +203,9 @@ class GenericApi(webapp2.RequestHandler):
     def should_cache(self,*args,**kw):
         return True
 
-    def getDocumentation(self,kind):
+    def getDocumentation(self,kind,rec):
+        if kind is None:
+            return [{'he':x, 'field':x} for x in rec.keys()]
         fields = ModelDocumentation.query(ModelDocumentation.model==kind,ModelDocumentation.order>=0).order(ModelDocumentation.order).fetch(25)
         fields = [ r.to_dict() for r in fields ]
         return fields
@@ -241,11 +243,13 @@ class GenericApi(webapp2.RequestHandler):
             ret = data.decode("zip")
         else:
             query = self.get_query(*args,**kw)
+            kind = None
             if isinstance(query,ndb.Query):
                 if self.do_paging():
                     ret = [ x.to_dict() for x in query.fetch(batch_size=self.first+self.limit,limit=self.limit,offset=self.first,use_cache=should_cache) ]
                 else:
                     ret = [ x.to_dict() for x in query.fetch(batch_size=self.limit,use_cache=should_cache) ]
+                kind = query.kind
             else:
                 ret = query
             if self.output_format == 'json':
@@ -254,11 +258,11 @@ class GenericApi(webapp2.RequestHandler):
                     ret = ret[0]
                 ret = CustomJSONEncoder().encode(ret)
             elif self.output_format == 'html':
-                ret = HTMLEncode(ret, self.getDocumentation(query.kind))
+                ret = HTMLEncode(ret, self.getDocumentation(kind,ret[0]))
             elif self.output_format == 'csv':
-                ret = CSVEncode(ret, self.getDocumentation(query.kind))
+                ret = CSVEncode(ret, self.getDocumentation(kind,ret[0]))
             elif self.output_format == 'xls':
-                ret = XLSEncode(ret, self.getDocumentation(query.kind))
+                ret = XLSEncode(ret, self.getDocumentation(kind,ret[0]))
             if key is not None:
                 try:
                     memcache.add(key, ret.encode("zip"), 3600)
@@ -862,12 +866,12 @@ class PendingChangesRss(webapp2.RequestHandler):
         for i in rss_item_ids:
             item = SystemProperty.query(SystemProperty.key=='rss_items[%s]' % i).fetch(1)[0]
             item = item.value
-            item['baseurl']='http://www.obudget.org/static/email/'
+            item['baseurl']='http://www.obudget.org/email/'
             item['pubdate']=last_mod.isoformat()
             rss_items.append(item)
         rss_items = [ { 'title': item['title'],
                         'description': item_template.render(item),
-                        'link': "http://www.obudget.org/stg/#transfer/%s/%s" % (item['group_id'],item['group'][0][0]),
+                        'link': "http://www.obudget.org/#transfer/%s/%s" % (item['group_id'],item['group'][0][0]),
                         'score': item['score'],
                         'pubdate': item['pubdate'] } for item in rss_items ]
         to_render = { 'title': rss_title,

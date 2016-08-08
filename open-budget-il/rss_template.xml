@@ -4,7 +4,7 @@
 <channel>
   <title>על שולחן ועדת הכספים</title>
   <subtitle>{{ title }}</subtitle>
-  <link>http://the.open-budget.org.il</link>
+  <link>http://www.obudget.org</link>
   <pkw:sender>פותחים את התקציב - הסדנא לידע ציבורי</pkw:sender>
   <pkw:html_template><![CDATA[
 {{feed_template|safe}}]]>
