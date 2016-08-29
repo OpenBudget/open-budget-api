@@ -5,7 +5,7 @@ cache:
 node_js:
 - stable
 before_install:
-- openssl aes-256-cbc -K $encrypted_e30e44343c10_key -iv $encrypted_e30e44343c10_iv -in ./open-budget-il/obudget-dev-bnaya-308347e8b708.json.enc -out ./open-budget-il/obudget-dev-bnaya-308347e8b708.json -d
+- openssl aes-256-cbc -K $encrypted_575e6db9695c_key -iv $encrypted_575e6db9695c_iv -in ./open-budget-il/open-budget-il-aaf0a776a535.json.enc -out ./open-budget-il/open-budget-il-aaf0a776a535.json -d
 - git submodule init
 - cd webapp
 - git checkout master -f
@@ -15,13 +15,12 @@ install:
 - npm install
 script: 
 - npm run lint && npm run build 
-- cd ../../open-budget-il 
-- ls webapp/main
+- cd ../../open-budget-il
 
 deploy:
   provider: gae
-  keyfile: obudget-dev-bnaya-308347e8b708.json
-  project: obudget-dev-bnaya
+  keyfile: open-budget-il-aaf0a776a535.json
+  project: open-budget-il
   version: staging
   no_promote: true
   on: 
