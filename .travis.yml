@@ -5,7 +5,8 @@ cache:
 node_js:
 - stable
 before_install:
-- openssl aes-256-cbc -K $encrypted_575e6db9695c_key -iv $encrypted_575e6db9695c_iv -in ./open-budget-il/open-budget-il-aaf0a776a535.json.enc -out ./open-budget-il/open-budget-il-aaf0a776a535.json -d
+- openssl aes-256-cbc -K $encrypted_887081f0f551_key -iv $encrypted_887081f0f551_iv -in secrets.tar.enc -out secrets.tar -d
+- tar -xvf secrets.tar
 - git submodule init
 - cd webapp
 - git checkout master -f
@@ -15,6 +16,7 @@ install:
 - npm install
 script: 
 - npm run lint && npm run build 
+- cd ../../open-budget-il
 
 deploy:
   provider: gae
