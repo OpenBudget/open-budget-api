@@ -8,10 +8,8 @@ before_install:
 - openssl aes-256-cbc -K $encrypted_887081f0f551_key -iv $encrypted_887081f0f551_iv -in secrets.tar.enc -out secrets.tar -d
 - tar -xvf secrets.tar
 - git submodule init
-- cd webapp
-- git checkout master -f
-- git pull origin master
-- cd open-budget
+- git submodule update
+- cd webapp/open-budget
 install:
 - npm install
 script: 
