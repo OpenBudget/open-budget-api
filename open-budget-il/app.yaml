@@ -15,11 +15,11 @@ handlers:
 - url: /report/api/.*
   script: main.report
 - url: /email/
-  static_files: webapp/emaildist/index.html
-  upload: webapp/emaildist/
+  static_files: webapp/email/dist/index.html
+  upload: webapp/email/dist/
 - url: /email/(.+)
-  static_files: webapp/emaildist/\1
-  upload: webapp/emaildist/
+  static_files: webapp/email/dist/\1
+  upload: webapp/email/dist/
 - url: /matches/
   static_files: webapp/matches/index.html
   upload: webapp/matches/

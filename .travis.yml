@@ -9,12 +9,16 @@ before_install:
 - tar -xvf secrets.tar
 - git submodule init
 - git submodule update
-- cd webapp/open-budget
 install:
+- cd webapp/open-budget
 - npm install
+- cd ../email
+- npm install
+- cd ../../
 script: 
-- npm run lint && npm run build 
-- cd ../../open-budget-il
+- cd webapp/open-budget && npm run lint && npm run build && cd ../../
+- cd webapp/email && npm run build && cd ../../
+- cd open-budget-il
 
 deploy:
   provider: gae
