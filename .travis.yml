@@ -24,7 +24,7 @@ deploy:
   provider: gae
   keyfile: open-budget-il-aaf0a776a535.json
   project: open-budget-il
-  version: 4
+  version: staging
   no_promote: true
   on: 
     branch: travis-deploy
