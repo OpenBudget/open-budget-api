@@ -5,6 +5,7 @@ cache:
 node_js:
 - stable
 before_install:
+- gem update --system && gem install compass
 - openssl aes-256-cbc -K $encrypted_887081f0f551_key -iv $encrypted_887081f0f551_iv -in secrets.tar.enc -out secrets.tar -d
 - tar -xvf secrets.tar
 - git submodule init
@@ -14,10 +15,16 @@ install:
 - npm install
 - cd ../email
 - npm install
+- cd ../matches
+- npm install
+- cd ../program_report
+- npm install
 - cd ../../
 script: 
 - cd webapp/open-budget && npm run lint && npm run build && cd ../../
 - cd webapp/email && npm run build && cd ../../
+- cd webapp/matches && npm run build && cd ../../
+- cd webapp/program_report && npm run build && cd ../../
 - cd open-budget-il
 
 deploy:
