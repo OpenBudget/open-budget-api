@@ -65,6 +65,7 @@ class Update(webapp2.RequestHandler):
         key = self.request.get("apikey")
         user = users.get_current_user()
         if (user is None or user.email() not in ALLOWED_EMAILS) and key != UPLOAD_KEY:
+            print('User=%r, key=%r' % (user, key))
             self.abort(403)
 
         # check if we are in a production or localhost environment
