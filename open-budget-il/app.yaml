@@ -18,26 +18,23 @@ handlers:
 - url: /email/
   static_files: webapp/emaildist/index.html
   upload: webapp/emaildist/index.html
-
 - url: /email
   static_dir: webapp/emaildist
   # upload: webapp/emaildist/
 
 - url: /matches/
   static_files: webapp/matches/index.html
-  upload: webapp/matches/
-- url: /matches/(.+)
-  static_files: webapp/matches/\1
-  upload: webapp/matches/
+  upload: webapp/matches/index.html
+- url: /matches
+  static_dir: webapp/matches
 - url: /report/go/
   static_files: webapp/dist/index.html
-  upload: webapp/dist/
+  upload: webapp/dist/index.html
+- url: /report/go
+  static_dir: webapp/dist
 - url: /static/email/img/(.+)
   static_files: webapp/email/img/\1
   upload: webapp/email/img/
-- url: /report/go/(.+)
-  static_files: webapp/dist/\1
-  upload: webapp/dist/
 
 - url: /tasks/.*
   script: main.tasks
