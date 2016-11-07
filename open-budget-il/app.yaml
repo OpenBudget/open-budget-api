@@ -9,7 +9,7 @@ handlers:
   script: main.api
 - url: /api
   static_files: docs/api.html
-  upload: docs/
+  upload: docs/api.html
 - url: /rss/.*
   script: main.api
 - url: /report/api/.*
