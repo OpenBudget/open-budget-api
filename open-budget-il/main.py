@@ -520,9 +520,12 @@ class ExemptionsDocumentsApi(webapp2.RequestHandler):
                 if zi.filename.endswith('xml'):
                     continue
                 filename = zi.filename.split('/')[-1]
-                print repr(zi.filename)
                 return filename, zf.read(zi)
 
+        if '%PDF' in response[:1024]:
+            return 'document.pdf', response
+
+        print "%r" % response[:128]
         doc = et.fromstring(response)
 
         # Get rid of the goddamn namespaces.
