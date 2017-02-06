@@ -310,7 +310,7 @@ class ULBudgetLine(UploadKind):
         return rank
 
     def should_index(self,item):
-        return item['year'] <= 2016
+        return item['year'] <= 2018
 
 class ULChangeLine(UploadKind):
     KIND = "cl"
